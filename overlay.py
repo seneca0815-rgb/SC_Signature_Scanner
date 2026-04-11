@@ -11,6 +11,7 @@ import json
 import re
 from pathlib import Path
 from collections import Counter
+from themes import THEMES
 
 import cv2
 import mss
@@ -25,6 +26,8 @@ CONFIG_PATH = Path(__file__).parent / "config.json"
 LOOKUP_PATH = Path(__file__).parent / "lookup.json"
 
 
+
+
 def load_json(path: Path) -> dict:
     with open(path, encoding="utf-8") as f:
         return json.load(f)
@@ -36,6 +39,12 @@ lookup: dict[str, str] = load_json(LOOKUP_PATH)
 pytesseract.pytesseract.tesseract_cmd = config.get(
     "tesseract_cmd", "tesseract"
 )
+
+#set theme
+theme_name = config.get("theme", "dark-gold")
+theme = THEMES.get(theme_name, THEMES["dark-gold"])
+# theme-Werte überschreiben config-Werte
+config = {**config, **theme}
 
 # Scan-Bereich: ganzer Bildschirm oder eingeschränkter Bereich aus config
 SCAN_REGION: dict = config.get("scan_region", {

@@ -3,10 +3,11 @@
   "min_area": 600,
   "aspect_min": 2.0,
   "aspect_max": 4.0,
-  
+
+  "theme": "dark-blue",
+
   "hsv_low":  [5,  80,  80],
   "hsv_high": [35, 255, 255],
-  "min_area": 120,
   "region_padding": 8,
 
   "vote_frames":  3,

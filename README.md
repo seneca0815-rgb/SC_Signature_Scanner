@@ -94,6 +94,9 @@ python -m venv .venv
 source .venv/bin/activate     # Linux / macOS
 pip install mss pillow pytesseract opencv-python numpy
 ```
+### Themes
+
+![Theme Preview](theme_preview.png)
 
 ### 3. Run
 ```bash
