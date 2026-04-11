@@ -3,7 +3,7 @@ from PIL import Image, ImageFilter, ImageEnhance, ImageOps
 import PIL.ImageChops as chops
 import pytesseract, mss
 
-ROI = {"top": 905, "left": 635, "width": 120, "height": 28}
+ROI = {"top": 492, "left": 1270, "width": 35, "height": 18}
 
 with mss.mss() as sct:
     raw = sct.grab(ROI)

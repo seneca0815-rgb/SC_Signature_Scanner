@@ -18,7 +18,7 @@ from pathlib import Path
 
 import mss
 import pytesseract
-from PIL import Image
+from PIL import Image, ImageFilter, ImageEnhance, ImageOps
 
 # ---------------------------------------------------------------------------
 # Konfiguration laden
@@ -85,27 +85,13 @@ def preprocess(img: Image.Image) -> Image.Image:
     return orange
 #
 def ocr_text(img: Image.Image) -> str:
-    # psm 7 = einzelne Textzeile
-    # whitelist = nur Ziffern (kein Icon-Buchstabenmüll)
     custom_config = r"--psm 7 -c tessedit_char_whitelist=0123456789"
     
-    data = pytesseract.image_to_data(
-        img,
-        config=custom_config,
-        output_type=pytesseract.Output.DICT,
-        lang="eng",
-    )
-    words = [
-        data["text"][i]
-        for i in range(len(data["text"]))
-        if int(data["conf"][i]) >= CONFIDENCE and data["text"][i].strip()
-    ]
-    return "".join(words).strip()  # join ohne Leerzeichen – nur Ziffern
-
-def normalize(text: str) -> str:
-    """Whitespace normalisieren, Sonderzeichen entfernen."""
-    text = re.sub(r"\s+", " ", text)
-    return text.strip()
+    raw = pytesseract.image_to_string(img, config=custom_config).strip()
+    digits_only = re.sub(r"[^\d]", "", raw)
+    
+    print(f"[OCR]    raw='{raw}'  →  digits='{digits_only}'")
+    return digits_only
 
 
 # ---------------------------------------------------------------------------
@@ -187,7 +173,7 @@ def lookup_text(raw: str) -> str | None:
                                   bei Gleichstand gewinnt die kleinste Distanz,
                                   bei Gleichstand die kürzere Schlüssellänge.
     """
-    norm = normalize(raw).lower()
+    norm = raw.strip().lower()
 
     # --- Stufe 1: exakter Treffer -------------------------------------------
     for key, val in lookup.items():
@@ -308,6 +294,10 @@ def scan_loop(overlay: OverlayWindow):
             img = capture_roi()
             img = preprocess(img)
             text = ocr_text(img)
+            # In scan_loop(), direkt nach ocr_text():
+            print(f"[OCR]    raw='{text}'")
+            result = lookup_text(text)
+            print(f"[LOOKUP] result='{result}'")
 
             if text:
                 result = lookup_text(text)

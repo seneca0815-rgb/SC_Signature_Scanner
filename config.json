@@ -1,10 +1,10 @@
 {
   "_comment": "ROI = der Bildschirmbereich, den der OCR-Scanner liest (in Pixeln)",
   "roi": {
-    "top":    542,
-    "left":   1250,
-    "width":  60,
-    "height":  20
+    "top":    492,
+    "left":   1270,
+    "width":  35,
+    "height":  18
   },
 
   "interval_ms":    400,
