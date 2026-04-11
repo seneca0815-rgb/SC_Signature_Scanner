@@ -56,24 +56,51 @@ def capture_roi() -> Image.Image:
 
 
 def preprocess(img: Image.Image) -> Image.Image:
-    """Einfaches Preprocessing: Graustufen + leichte Vergrößerung für Tesseract."""
-    img = img.convert("L")          # Graustufen
+    # 1. Stark vergrößern (Tesseract mag >= 30px Schrifthöhe)
     w, h = img.size
-    img = img.resize((w * 2, h * 2), Image.LANCZOS)
-    return img
+    img = img.resize((w * 4, h * 4), Image.LANCZOS)
 
+    # 2. Nur den orangen/gelben Farbkanal isolieren
+    #    SC-Signaturen sind orange – Rot- und Grünkanal addieren,
+    #    Blaukanal (Hintergrundfarbe) subtrahieren
+    r, g, b = img.split()
+    # Orange = hoher R + mittlerer G + niedriger B
+    # Durch Subtraktion des Blaukanals wird Orange hell, Hintergrund dunkel
+    import PIL.ImageChops as chops
+    orange = chops.add(r, g)           # R+G ergibt gelb-orange Kanal
+    orange = chops.subtract(orange, b) # Blau rausrechnen
 
+    # 3. Kontrast maximieren
+    orange = ImageEnhance.Contrast(orange).enhance(3.0)
+
+    # 4. Schwellwert: alles unter 128 → schwarz, darüber → weiß
+    orange = orange.point(lambda p: 255 if p > 100 else 0)
+
+    # 5. Invertieren: schwarze Schrift auf weißem Grund (Tesseract-Standard)
+    orange = ImageOps.invert(orange)
+
+    # 6. Leicht schärfen
+    orange = orange.filter(ImageFilter.SHARPEN)
+
+    return orange
+#
 def ocr_text(img: Image.Image) -> str:
-    """Gibt den erkannten Text zurück (nur Zeichen >= CONFIDENCE-Schwellwert)."""
-    data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT,
-                                     lang=config.get("lang", "eng"))
+    # psm 7 = einzelne Textzeile
+    # whitelist = nur Ziffern (kein Icon-Buchstabenmüll)
+    custom_config = r"--psm 7 -c tessedit_char_whitelist=0123456789"
+    
+    data = pytesseract.image_to_data(
+        img,
+        config=custom_config,
+        output_type=pytesseract.Output.DICT,
+        lang="eng",
+    )
     words = [
         data["text"][i]
         for i in range(len(data["text"]))
         if int(data["conf"][i]) >= CONFIDENCE and data["text"][i].strip()
     ]
-    return " ".join(words).strip()
-
+    return "".join(words).strip()  # join ohne Leerzeichen – nur Ziffern
 
 def normalize(text: str) -> str:
     """Whitespace normalisieren, Sonderzeichen entfernen."""
