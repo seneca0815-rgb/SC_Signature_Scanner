@@ -1,28 +1,26 @@
 {
-  "_comment": "ROI = der Bildschirmbereich, den der OCR-Scanner liest (in Pixeln)",
-  "roi": {
-    "top":    492,
-    "left":   1270,
-    "width":  35,
-    "height":  18
-  },
+  "scan_region": { "top": 390, "left": 1080, "width": 400, "height": 90 },
+  "min_area": 600,
+  "aspect_min": 2.0,
+  "aspect_max": 4.0,
+  
+  "hsv_low":  [5,  80,  80],
+  "hsv_high": [35, 255, 255],
+  "min_area": 120,
+  "region_padding": 8,
 
-  "interval_ms":    400,
-  "ocr_confidence": 60,
-  "lang":           "eng",
+  "vote_frames":  3,
+  "interval_ms":  500,
+  "fuzzy_max_distance": 1,
 
-  "_tesseract": "Pfad zur tesseract.exe (Windows) oder 'tesseract' (Linux/macOS)",
   "tesseract_cmd": "C:\\Program Files\\Tesseract-OCR\\tesseract.exe",
 
-  "overlay_x":   30,
-  "overlay_y":   30,
-  "alpha":       0.88,
-  "bg_color":    "#111827",
-  "fg_color":    "#e2c97e",
+  "overlay_x": 30,
+  "overlay_y": 30,
+  "alpha": 0.88,
+  "bg_color": "#111827",
+  "fg_color": "#e2c97e",
   "font_family": "Consolas",
-  "font_size":   13,
-  "wrap_width":  400,
-
-  "_fuzzy": "Levenshtein-Schwellwert: 1 = 1 falsches Zeichen tolerieren, 0 = deaktivieren",
-  "fuzzy_max_distance": 1
+  "font_size": 13,
+  "wrap_width": 400
 }

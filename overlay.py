@@ -1,12 +1,7 @@
 """
-Star Citizen UI Overlay – Hauptprogramm
-Liest einen definierten Bildschirmbereich per OCR aus,
-sucht den Text in einer Lookup-Tabelle und blendet das
-Ergebnis als transparentes Always-on-Top-Fenster ein.
-
-Abhängigkeiten:
-    pip install mss pillow pytesseract
-    + Tesseract-OCR installieren: https://github.com/UB-Mannheim/tesseract/wiki
+Star Citizen UI Overlay – Hauptprogramm (robuste Version)
+Erkennt orange Signaturnummern automatisch per Farb-Segmentierung,
+unabhängig von UI-Skalierung oder FOV-Einstellung.
 """
 
 import tkinter as tk
@@ -15,10 +10,13 @@ import time
 import json
 import re
 from pathlib import Path
+from collections import Counter
 
+import cv2
 import mss
+import numpy as np
 import pytesseract
-from PIL import Image, ImageFilter, ImageEnhance, ImageOps
+from PIL import Image, ImageOps, ImageFilter
 
 # ---------------------------------------------------------------------------
 # Konfiguration laden
@@ -35,88 +33,133 @@ def load_json(path: Path) -> dict:
 config = load_json(CONFIG_PATH)
 lookup: dict[str, str] = load_json(LOOKUP_PATH)
 
-# Region of Interest aus config (Pixel-Koordinaten des zu lesenden UI-Bereichs)
-ROI: dict = config["roi"]          # {"top": y, "left": x, "width": w, "height": h}
-INTERVAL: float = config.get("interval_ms", 400) / 1000
-CONFIDENCE: int = config.get("ocr_confidence", 60)
-TESSERACT_CMD: str = config.get("tesseract_cmd", "tesseract")
+pytesseract.pytesseract.tesseract_cmd = config.get(
+    "tesseract_cmd", "tesseract"
+)
 
-pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD
+# Scan-Bereich: ganzer Bildschirm oder eingeschränkter Bereich aus config
+SCAN_REGION: dict = config.get("scan_region", {
+    "top": 0, "left": 0, "width": 1920, "height": 1080
+})
+INTERVAL: float    = config.get("interval_ms", 500) / 1000
+FUZZY_MAX_DIST: int = config.get("fuzzy_max_distance", 1)
+MIN_DIGITS      = 4   # Signaturen sind mindestens 4-stellig
+MAX_DIGITS      = 5
 
 
 # ---------------------------------------------------------------------------
-# OCR-Hilfsfunktionen
+# Schritt 1: Screenshot → orange Regionen finden
 # ---------------------------------------------------------------------------
 
-def capture_roi() -> Image.Image:
-    """Macht einen Screenshot des konfigurierten ROI-Bereichs."""
+# HSV-Bereich für SC-Orange (Farbe der Signaturnummern)
+# Werte können in config.json überschrieben werden
+_HSV_LOW  = np.array(config.get("hsv_low",  [8,  120, 120]), dtype=np.uint8)
+_HSV_HIGH = np.array(config.get("hsv_high", [30, 255, 255]), dtype=np.uint8)
+
+# Mindestgröße einer Region in Pixeln (filtert Rauschen heraus)
+_MIN_AREA = config.get("min_area", 200)
+# Padding um jede gefundene Region (gibt Tesseract etwas Luft)
+_PADDING  = config.get("region_padding", 6)
+
+
+def grab_screen() -> np.ndarray:
+    """Screenshot als BGR-numpy-Array."""
     with mss.mss() as sct:
-        raw = sct.grab(ROI)
-        return Image.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
+        raw = sct.grab(SCAN_REGION)
+        img = np.frombuffer(raw.bgra, dtype=np.uint8)
+        img = img.reshape((raw.height, raw.width, 4))
+        return cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
+
+
+def find_orange_regions(bgr: np.ndarray) -> list[tuple[int,int,int,int]]:
+    hsv  = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+    mask = cv2.inRange(hsv, _HSV_LOW, _HSV_HIGH)
+
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+    mask   = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+
+    contours, _ = cv2.findContours(
+        mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+    )
+
+    aspect_min = config.get("aspect_min", 2.0)
+    aspect_max = config.get("aspect_max", 4.0)
+    regions = []
+    h_img, w_img = bgr.shape[:2]
+
+    for cnt in contours:
+        area = cv2.contourArea(cnt)
+        if area < _MIN_AREA:
+            continue
+        x, y, w, h = cv2.boundingRect(cnt)
+        aspect = w / max(1, h)
+        if not (aspect_min <= aspect <= aspect_max):
+            continue
+        x1 = max(0, x - _PADDING)
+        y1 = max(0, y - _PADDING)
+        x2 = min(w_img, x + w + _PADDING)
+        y2 = min(h_img, y + h + _PADDING)
+        regions.append((x1, y1, x2 - x1, y2 - y1))
+
+    return regions
+
+# ---------------------------------------------------------------------------
+# Schritt 2: Region → OCR
+# ---------------------------------------------------------------------------
+
+def region_to_pil(bgr: np.ndarray,
+                  region: tuple[int,int,int,int]) -> Image.Image:
+    """Schneidet eine Region aus und konvertiert zu PIL."""
+    x, y, w, h = region
+    crop = bgr[y:y+h, x:x+w]
+    return Image.fromarray(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB))
 
 
 def preprocess(img: Image.Image) -> Image.Image:
-    # 1. Stark vergrößern (Tesseract mag >= 30px Schrifthöhe)
+    """Orange-Text-Extraktion + Tesseract-Vorbereitung."""
+    # 4× hochskalieren
     w, h = img.size
-    img = img.resize((w * 4, h * 4), Image.LANCZOS)
+    img  = img.resize((w * 4, h * 4), Image.LANCZOS)
 
-    # 2. Nur den orangen/gelben Farbkanal isolieren
-    #    SC-Signaturen sind orange – Rot- und Grünkanal addieren,
-    #    Blaukanal (Hintergrundfarbe) subtrahieren
-    r, g, b = img.split()
-    # Orange = hoher R + mittlerer G + niedriger B
-    # Durch Subtraktion des Blaukanals wird Orange hell, Hintergrund dunkel
+    # Orange isolieren über R+G-B Kanal
     import PIL.ImageChops as chops
-    orange = chops.add(r, g)           # R+G ergibt gelb-orange Kanal
-    orange = chops.subtract(orange, b) # Blau rausrechnen
-
-    # 3. Kontrast maximieren
-    orange = ImageEnhance.Contrast(orange).enhance(3.0)
-
-    # 4. Schwellwert: alles unter 128 → schwarz, darüber → weiß
-    orange = orange.point(lambda p: 255 if p > 100 else 0)
-
-    # 5. Invertieren: schwarze Schrift auf weißem Grund (Tesseract-Standard)
-    orange = ImageOps.invert(orange)
-
-    # 6. Leicht schärfen
-    orange = orange.filter(ImageFilter.SHARPEN)
-
+    r, g, b = img.split()
+    orange  = chops.subtract(chops.add(r, g), b)
+    from PIL import ImageEnhance
+    orange  = ImageEnhance.Contrast(orange).enhance(3.0)
+    orange  = orange.point(lambda p: 255 if p > 80 else 0)
+    orange  = ImageOps.invert(orange)
+    orange  = orange.filter(ImageFilter.SHARPEN)
     return orange
-#
-def ocr_text(img: Image.Image) -> str:
-    custom_config = r"--psm 7 -c tessedit_char_whitelist=0123456789"
-    
-    raw = pytesseract.image_to_string(img, config=custom_config).strip()
-    digits_only = re.sub(r"[^\d]", "", raw)
-    
-    print(f"[OCR]    raw='{raw}'  →  digits='{digits_only}'")
-    return digits_only
+
+
+def ocr_region(img: Image.Image) -> str:
+    """Gibt erkannte Ziffernfolge zurück, oder ''."""
+    processed = preprocess(img)
+    raw = pytesseract.image_to_string(
+        processed,
+        config=r"--psm 7 -c tessedit_char_whitelist=0123456789"
+    ).strip()
+    return re.sub(r"[^\d]", "", raw)
 
 
 # ---------------------------------------------------------------------------
-# Fuzzy-Matching (Levenshtein – keine externe Abhängigkeit)
+# Schritt 3: Fuzzy Lookup (unverändert)
 # ---------------------------------------------------------------------------
 
 def levenshtein(a: str, b: str) -> int:
-    """Berechnet die Levenshtein-Editierdistanz zwischen zwei Strings."""
-    if a == b:
-        return 0
-    if not a:
-        return len(b)
-    if not b:
-        return len(a)
-    # Nur zwei Zeilen des DP-Arrays nötig → O(min(|a|,|b|)) Speicher
-    if len(a) < len(b):
-        a, b = b, a
+    if a == b: return 0
+    if not a:  return len(b)
+    if not b:  return len(a)
+    if len(a) < len(b): a, b = b, a
     prev = list(range(len(b) + 1))
     for i, ca in enumerate(a, 1):
         curr = [i]
         for j, cb in enumerate(b, 1):
             curr.append(min(
-                prev[j] + 1,          # Löschen
-                curr[j - 1] + 1,      # Einfügen
-                prev[j - 1] + (ca != cb),  # Ersetzen
+                prev[j] + 1,
+                curr[j - 1] + 1,
+                prev[j - 1] + (ca != cb),
             ))
         prev = curr
     return prev[-1]
@@ -124,118 +167,113 @@ def levenshtein(a: str, b: str) -> int:
 
 _OCR_DIGIT_MAP = str.maketrans("lI|OoSBZG", "111005826")
 
-
-def _ocr_normalize_digits(text: str) -> str:
-    """
-    Ersetzt haeufige OCR-Buchstaben-Ziffer-Verwechslungen innerhalb
-    von Bloecken, die ausschliesslich aus Ziffern und Lookalike-Zeichen bestehen:
-      l / I / |  -> 1
-      O / o      -> 0
-      S          -> 5
-      B          -> 8
-      Z          -> 2
-      G          -> 6
-    Nur Bloecke mit 4-6 Zeichen werden angefasst, damit Mineralnamen
-    im OCR-Text nicht verfaelscht werden.
-    """
-    def _replace(m: re.Match) -> str:
-        return m.group().translate(_OCR_DIGIT_MAP)
-    return re.sub(r"[0-9lI|OoSBZG]{4,6}", _replace, text)
-
+def _normalize_digits(text: str) -> str:
+    def _r(m): return m.group().translate(_OCR_DIGIT_MAP)
+    return re.sub(r"[0-9lI|OoSBZG]{4,6}", _r, text)
 
 def _extract_numbers(text: str) -> list[str]:
-    """
-    Normalisiert OCR-Fehllesungen, dann alle 4-6-stelligen
-    Ziffernfolgen extrahieren (Signaturen sind stets 4-5-stellig).
-    """
-    return re.findall(r"\d{4,6}", _ocr_normalize_digits(text))
-
-
-# ---------------------------------------------------------------------------
-# Lookup
-# ---------------------------------------------------------------------------
-
-# Maximale Levenshtein-Distanz, ab der ein Fuzzy-Treffer noch akzeptiert wird.
-# 1 = ein falsch erkanntes Zeichen (z.B. '17l40' statt '17140').
-# Aus config überschreibbar: "fuzzy_max_distance": 1
-FUZZY_MAX_DIST: int = config.get("fuzzy_max_distance", 1)
+    return re.findall(r"\d{4,6}", _normalize_digits(text))
 
 
 def lookup_text(raw: str) -> str | None:
-    """
-    Sucht `raw` in der Lookup-Tabelle mit dreistufiger Strategie:
-
-    1. Exakter Treffer          – Schlüssel == normalisierter OCR-Text
-    2. Substring-Treffer        – Schlüssel kommt als Teilstring vor
-    3. Fuzzy-Treffer            – eine Ziffernfolge im OCR-Text hat
-                                  Levenshtein-Distanz <= FUZZY_MAX_DIST
-                                  zu einem Tabellen-Schlüssel;
-                                  bei Gleichstand gewinnt die kleinste Distanz,
-                                  bei Gleichstand die kürzere Schlüssellänge.
-    """
     norm = raw.strip().lower()
-
-    # --- Stufe 1: exakter Treffer -------------------------------------------
     for key, val in lookup.items():
-        if key.lower() == norm:
-            return val
-
-    # --- Stufe 2: Substring-Treffer -----------------------------------------
+        if key.lower() == norm: return val
     for key, val in lookup.items():
-        if key.lower() in norm:
-            return val
+        if key.lower() in norm: return val
 
-    # --- Stufe 3: Fuzzy auf Ziffernfolgen ------------------------------------
     candidates = _extract_numbers(raw)
-    if not candidates:
-        return None
+    if not candidates: return None
 
-    best_dist = FUZZY_MAX_DIST + 1   # schlechter als Schwellwert → kein Treffer
-    best_val: str | None = None
-
+    best_dist, best_val = FUZZY_MAX_DIST + 1, None
     for key, val in lookup.items():
-        key_norm = key.strip()
         for cand in candidates:
-            dist = levenshtein(cand, key_norm)
-            if dist < best_dist or (
-                dist == best_dist and best_val and len(key_norm) < len(best_val)
-            ):
-                best_dist = dist
-                best_val = val
+            d = levenshtein(cand, key.strip())
+            if d < best_dist:
+                best_dist, best_val = d, val
 
     if best_dist <= FUZZY_MAX_DIST:
-        # Fuzzy-Treffer mit visueller Kennzeichnung zurückgeben
-        return f"~  {best_val}  (Fuzzy, Δ={best_dist})"
-
+        return f"~  {best_val}  (Fuzzy Δ={best_dist})"
     return None
 
 
 # ---------------------------------------------------------------------------
-# Overlay-Fenster (tkinter)
+# Schritt 4: Scan-Loop mit Voting
+# ---------------------------------------------------------------------------
+
+def scan_once() -> list[tuple[str, str]]:
+    """
+    Ein Scan-Durchlauf.
+    Gibt Liste von (erkannte_zahl, lookup_ergebnis) zurück.
+    """
+    bgr     = grab_screen()
+    regions = find_orange_regions(bgr)
+    hits    = []
+
+    for region in regions:
+        pil  = region_to_pil(bgr, region)
+        text = ocr_region(pil)
+
+        if not (MIN_DIGITS <= len(text) <= MAX_DIGITS + 1):
+            continue        # zu kurz oder zu lang → kein Signaturwert
+
+        result = lookup_text(text)
+        print(f"[OCR] '{text}'  →  {result}")
+        if result:
+            hits.append((text, result))
+
+    return hits
+
+
+def scan_loop(overlay: "OverlayWindow"):
+    """Voting über mehrere Frames für stabile Erkennung."""
+    VOTE_FRAMES = config.get("vote_frames", 3)
+    buffer: list[str] = []
+    last_shown = None
+
+    while True:
+        try:
+            hits = scan_once()
+            if hits:
+                # Bestes Hit (höchste Lookup-Priorität = erstes in der Liste)
+                buffer.append(hits[0][1])
+            else:
+                buffer.append("")
+
+            # Nur die letzten N Frames behalten
+            buffer = buffer[-VOTE_FRAMES:]
+
+            if len(buffer) == VOTE_FRAMES:
+                winner = Counter(buffer).most_common(1)[0][0]
+                if winner != last_shown:
+                    last_shown = winner
+                    if winner:
+                        overlay.show(f"ℹ  {winner}")
+                    else:
+                        overlay.hide()
+
+        except Exception as exc:
+            print(f"[scan_loop] Fehler: {exc}")
+
+        time.sleep(INTERVAL)
+
+
+# ---------------------------------------------------------------------------
+# Overlay-Fenster (tkinter – unverändert)
 # ---------------------------------------------------------------------------
 
 class OverlayWindow:
-    """Transparentes, click-through Always-on-Top-Fenster."""
-
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("SC Overlay")
-
-        # Fenster-Eigenschaften
-        self.root.overrideredirect(True)           # keine Titelleiste
-        self.root.attributes("-topmost", True)     # immer im Vordergrund
+        self.root.overrideredirect(True)
+        self.root.attributes("-topmost", True)
         self.root.attributes("-alpha", config.get("alpha", 0.85))
         self.root.configure(bg="black")
-
-        # Transparenz-Farbe (click-through für den schwarzen Hintergrund)
         self.root.wm_attributes("-transparentcolor", "black")
-
-        # Position & Größe aus config
         ox = config.get("overlay_x", 20)
         oy = config.get("overlay_y", 20)
         self.root.geometry(f"+{ox}+{oy}")
-
-        # Label für den angezeigten Text
         self.label = tk.Label(
             self.root,
             text="",
@@ -248,29 +286,20 @@ class OverlayWindow:
             justify="left",
         )
         self.label.pack()
-        self.root.withdraw()   # zunächst verstecken
-
+        self.root.withdraw()
         self._current_text = ""
 
-    # ------------------------------------------------------------------ API
-
     def show(self, text: str):
-        """Text anzeigen (threadsafe via after)."""
         self.root.after(0, self._update, text)
 
     def hide(self):
-        """Overlay verstecken."""
         self.root.after(0, self._hide)
 
     def run(self):
-        """Tkinter-Mainloop (blockierend – läuft im Haupt-Thread)."""
         self.root.mainloop()
 
-    # ------------------------------------------------------------------ intern
-
     def _update(self, text: str):
-        if text == self._current_text:
-            return
+        if text == self._current_text: return
         self._current_text = text
         if text:
             self.label.config(text=text)
@@ -284,50 +313,12 @@ class OverlayWindow:
 
 
 # ---------------------------------------------------------------------------
-# Scan-Loop (läuft im Hintergrund-Thread)
-# ---------------------------------------------------------------------------
-
-def scan_loop(overlay: OverlayWindow):
-    last_key = None
-    while True:
-        try:
-            img = capture_roi()
-            img = preprocess(img)
-            text = ocr_text(img)
-            # In scan_loop(), direkt nach ocr_text():
-            print(f"[OCR]    raw='{text}'")
-            result = lookup_text(text)
-            print(f"[LOOKUP] result='{result}'")
-
-            if text:
-                result = lookup_text(text)
-                if result != last_key:
-                    last_key = result
-                    if result:
-                        overlay.show(f"ℹ  {result}")
-                    else:
-                        overlay.hide()
-            else:
-                if last_key is not None:
-                    last_key = None
-                    overlay.hide()
-
-        except Exception as exc:         # noqa: BLE001
-            print(f"[scan_loop] Fehler: {exc}")
-
-        time.sleep(INTERVAL)
-
-
-# ---------------------------------------------------------------------------
 # Einstiegspunkt
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     overlay = OverlayWindow()
-
-    # Scan-Thread als Daemon starten (stirbt mit dem Hauptprozess)
     t = threading.Thread(target=scan_loop, args=(overlay,), daemon=True)
     t.start()
-
-    print("SC Overlay gestartet. Fenster schließen zum Beenden.")
+    print("SC Overlay gestartet.")
     overlay.run()

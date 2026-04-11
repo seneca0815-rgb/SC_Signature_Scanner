@@ -1,31 +1,48 @@
-# test_preprocess.py – zeigt wie Tesseract das Bild wirklich sieht
-from PIL import Image, ImageFilter, ImageEnhance, ImageOps
-import PIL.ImageChops as chops
-import pytesseract, mss
+# debug_screenshots.py
+# Teste die Farberkennung direkt auf deinen SC-Screenshots
+import cv2, numpy as np
+from pathlib import Path
 
-ROI = {"top": 492, "left": 1270, "width": 35, "height": 18}
+HSV_LOW  = np.array([5,  80,  80], dtype=np.uint8)
+HSV_HIGH = np.array([35, 255, 255], dtype=np.uint8)
+MIN_AREA = 80
 
-with mss.mss() as sct:
-    raw = sct.grab(ROI)
-    img = Image.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
+screenshot_dir = Path(r"E:\SW_Projekte\SC_Signature_Reader\screenshots")  # Pfad anpassen
 
-img.save("1_original.png")
+for img_path in sorted(screenshot_dir.glob("ScreenShot*.jpg"))[:7]:
+    bgr = cv2.imread(str(img_path))
+    if bgr is None:
+        continue
 
-# Preprocessing durchlaufen lassen
-w, h = img.size
-img = img.resize((w * 4, h * 4), Image.LANCZOS)
-r, g, b = img.split()
-orange = chops.add(r, g)
-orange = chops.subtract(orange, b)
-orange = ImageEnhance.Contrast(orange).enhance(3.0)
-orange = orange.point(lambda p: 255 if p > 100 else 0)
-orange = ImageOps.invert(orange)
-orange = orange.filter(ImageFilter.SHARPEN)
+    h_img, w_img = bgr.shape[:2]
 
-orange.save("2_preprocessed.png")  # <-- so sieht Tesseract das Bild
+    # Nur mittlerer Bereich (wo die Signatur sitzt)
+    x1, y1 = int(w_img * 0.35), int(h_img * 0.22)
+    x2, y2 = int(w_img * 0.65), int(h_img * 0.40)
+    roi = bgr[y1:y2, x1:x2]
 
-text = pytesseract.image_to_string(
-    orange,
-    config=r"--psm 7 -c tessedit_char_whitelist=0123456789"
-)
-print(f"Erkannt: {text.strip()!r}")
+    hsv  = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+    mask = cv2.inRange(hsv, HSV_LOW, HSV_HIGH)
+
+    kernel   = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+    mask     = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    print(f"\n{img_path.name}  ({w_img}x{h_img})")
+    found = 0
+    for cnt in contours:
+        area = cv2.contourArea(cnt)
+        if area < MIN_AREA:
+            continue
+        x, y, w, h = cv2.boundingRect(cnt)
+        aspect = w / max(1, h)
+        print(f"  Region: x={x+x1} y={y+y1} w={w} h={h}  area={area:.0f}  aspect={aspect:.1f}")
+        found += 1
+
+    if found == 0:
+        print("  → Keine Regionen gefunden!")
+
+        # HSV-Wert direkt am Bildmittelpunkt ausgeben zur Diagnose
+        cy, cx = (y2-y1)//2, (x2-x1)//2
+        h_val, s_val, v_val = hsv[cy, cx]
+        print(f"  → HSV Bildmitte: H={h_val} S={s_val} V={v_val}")
