@@ -52,8 +52,8 @@ Filename: "powershell.exe"; \
 ; 3. Launch setup wizard on first start
 Filename: "{app}\{#AppExe}"; \
   Parameters: "--setup"; \
-  Description: "Configure SC Signature Reader"; \
-  Flags: postinstall nowait
+  StatusMsg: "Starting setup wizard..."; \
+  Flags: nowait
 
 [Icons]
 Name: "{group}\{#AppName}";           Filename: "{app}\{#AppExe}"

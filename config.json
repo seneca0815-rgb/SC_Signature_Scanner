@@ -1,21 +1,29 @@
 {
-  "scan_region": { "top": 390, "left": 1080, "width": 400, "height": 90 },
+  "scan_region": {
+    "top": 300,
+    "left": 1100,
+    "width": 300,
+    "height": 300
+  },
   "min_area": 600,
   "aspect_min": 2.0,
   "aspect_max": 4.0,
-
-  "theme": "dark-blue",
-
-  "hsv_low":  [5,  80,  80],
-  "hsv_high": [35, 255, 255],
+  "theme": "dark-gold",
+  "hsv_low": [
+    5,
+    80,
+    80
+  ],
+  "hsv_high": [
+    35,
+    255,
+    255
+  ],
   "region_padding": 8,
-
-  "vote_frames":  3,
-  "interval_ms":  500,
+  "vote_frames": 3,
+  "interval_ms": 500,
   "fuzzy_max_distance": 1,
-
   "tesseract_cmd": "C:\\Program Files\\Tesseract-OCR\\tesseract.exe",
-
   "overlay_x": 30,
   "overlay_y": 30,
   "alpha": 0.88,

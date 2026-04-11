@@ -4,6 +4,7 @@ Erkennt orange Signaturnummern automatisch per Farb-Segmentierung,
 unabhängig von UI-Skalierung oder FOV-Einstellung.
 """
 
+import sys
 import tkinter as tk
 import threading
 import time
@@ -326,8 +327,14 @@ class OverlayWindow:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    # Setup-Wizard starten falls --setup übergeben wurde
+    # oder config.json noch kein Theme enthält (Erststart)
+    if "--setup" in sys.argv or not Path("config.json").exists():
+        from setup_wizard import SetupWizard
+        SetupWizard().run()
+
     overlay = OverlayWindow()
     t = threading.Thread(target=scan_loop, args=(overlay,), daemon=True)
     t.start()
-    print("SC Overlay gestartet.")
+    print("SC Signature Reader started.")
     overlay.run()

@@ -70,7 +70,9 @@ against a lookup table of 155 known signature values.
   transparent window, always on top
   shows result, hides itself when no match found
 ```
-
+## Setup
+Copy `config.example.json` to `config.json` and adjust the paths,
+or run the setup wizard: `SCSigReader.exe --setup`
 ---
 
 ## Installation

@@ -88,6 +88,9 @@ class SetupWizard:
         self._build_nav()
         self._render_step()
 
+        # Fenster-X-Button abfangen
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
     # ------------------------------------------------------------------
     # Persistent chrome
     # ------------------------------------------------------------------
@@ -268,6 +271,10 @@ class SetupWizard:
         ex  = theme.get("example", "ℹ  Example text")
         fs  = theme.get("font_size", 13)
 
+        # Destroy previous canvas before creating a new one
+        for child in self._preview_label.winfo_children():
+            child.destroy()
+
         # Build a tiny canvas that mimics the real overlay
         canvas = tk.Canvas(
             self._preview_label,
@@ -319,6 +326,11 @@ class SetupWizard:
     # ------------------------------------------------------------------
     # Save & launch
     # ------------------------------------------------------------------
+    def _on_close(self):
+        """Roter X-Button – Config nicht speichern, Prozess beenden."""
+        self.root.destroy()
+        sys.exit(0)
+
 
     def _save_and_close(self):
         # Load existing config
@@ -333,17 +345,16 @@ class SetupWizard:
         region    = RESOLUTIONS.get(res_label)
         if region:
             cfg["scan_region"] = region
-
         # Theme
-        theme_name = self._theme_var.get()
-        cfg["theme"] = theme_name
+        cfg["theme"] = self._theme_var.get()
 
         # Write back
         with open(CONFIG_PATH, "w", encoding="utf-8") as fh:
             json.dump(cfg, fh, indent=2, ensure_ascii=False)
 
         self.root.destroy()
-
+        sys.exit(0)      # ← Prozess explizit beenden
+        
     def run(self):
         self.root.mainloop()
 
