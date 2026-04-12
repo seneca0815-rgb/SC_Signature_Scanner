@@ -205,8 +205,10 @@ class TestInstallerManifest(unittest.TestCase):
 
     ISS_PATH = PROJECT_ROOT / "SCSigReader.iss"
 
-    # Files absent in a clean checkout — either built artifacts or generated
-    SKIP_PATTERNS = {"dist\\", "redist\\", "config.json", "theme_preview.png"}
+    # Exact filenames generated during build (absent in clean checkout)
+    SKIP_FILES    = {"config.json", "theme_preview.png"}
+    # Path prefixes for binary build artifacts (dist\, redist\)
+    SKIP_PREFIXES = {"dist\\", "redist\\"}
 
     def _parse_source_files(self) -> list[Path]:
         """Extract Source: paths from the [Files] section of the .iss script."""
@@ -235,7 +237,7 @@ class TestInstallerManifest(unittest.TestCase):
         self.assertGreater(len(sources), 0,
                            "No source files found in .iss — check parsing")
         for src in sources:
-            if any(src.startswith(skip) for skip in self.SKIP_PATTERNS):
+            if src in self.SKIP_FILES or any(src.startswith(p) for p in self.SKIP_PREFIXES):
                 continue
             path = PROJECT_ROOT / src
             with self.subTest(file=src):

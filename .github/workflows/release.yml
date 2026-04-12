@@ -21,6 +21,16 @@ jobs:
         run: pip install -r requirements.txt pyinstaller
 
       # ---------------------------------------------------------------
+      # Prepare files required by tests and the installer
+      # ---------------------------------------------------------------
+      - name: Prepare config.json from example
+        run: Copy-Item -Path config.example.json -Destination config.json -Force
+        shell: pwsh
+
+      - name: Generate theme_preview.png
+        run: python generate_theme_preview.py
+
+      # ---------------------------------------------------------------
       # Gate: all tests must pass before building
       # ---------------------------------------------------------------
       - name: Run tests
@@ -57,16 +67,6 @@ jobs:
           --add-data "themes.py;."
           --add-data "setup_wizard.py;."
           --name "SCSigReader"
-
-      # ---------------------------------------------------------------
-      # Prepare data files expected by the installer
-      # ---------------------------------------------------------------
-      - name: Prepare config.json from example
-        run: copy config.example.json config.json
-        shell: cmd
-
-      - name: Generate theme_preview.png
-        run: python generate_theme_preview.py
 
       # ---------------------------------------------------------------
       # Build installer with Inno Setup
