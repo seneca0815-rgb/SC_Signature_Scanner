@@ -27,6 +27,23 @@ PrivilegesRequired=admin
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
+[Registry]
+; Add Tesseract bin directory to PATH so tesseract.exe and its DLLs are
+; found by all applications. NeedsAddPath() prevents duplicate entries.
+Root: HKLM; \
+  Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; \
+  ValueType: expandsz; ValueName: "Path"; \
+  ValueData: "{olddata};C:\Program Files\Tesseract-OCR"; \
+  Check: NeedsAddPath('C:\Program Files\Tesseract-OCR')
+
+; TESSDATA_PREFIX tells Tesseract where to find language/model data when
+; it cannot determine the path from its own executable location (e.g. when
+; called from a frozen exe or a non-standard working directory).
+Root: HKLM; \
+  Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; \
+  ValueType: expandsz; ValueName: "TESSDATA_PREFIX"; \
+  ValueData: "C:\Program Files\Tesseract-OCR"
+
 [Files]
 ; Main executable (built with PyInstaller)
 Source: "dist\{#AppExe}";             DestDir: "{app}"; Flags: ignoreversion
@@ -51,9 +68,10 @@ Filename: "{tmp}\tesseract-setup.exe"; \
   StatusMsg: "Installing Tesseract OCR..."; \
   Flags: waituntilterminated
 
-; 2. Patch tesseract_cmd in config.json after Tesseract is installed
+; 2. Patch tesseract_cmd value in config.json after Tesseract is installed.
+; Uses ConvertFrom-Json / ConvertTo-Json to avoid corrupting other keys.
 Filename: "powershell.exe"; \
-  Parameters: "-Command ""(Get-Content '{app}\config.json') -replace 'tesseract', 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe' | Set-Content '{app}\config.json'"""; \
+  Parameters: "-Command ""$c = Get-Content '{app}\config.json' -Raw | ConvertFrom-Json; $c.tesseract_cmd = 'C:\Program Files\Tesseract-OCR\tesseract.exe'; $c | ConvertTo-Json -Depth 10 | Set-Content '{app}\config.json'"""; \
   Flags: runhidden waituntilterminated
 
 ; 3. Launch setup wizard on first start
@@ -72,3 +90,32 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 
 [UninstallDelete]
 Type: files; Name: "{app}\config.json"
+
+[Code]
+{ Returns True when Dir is not already present in the system PATH,
+  so the [Registry] entry is only written when actually needed. }
+function NeedsAddPath(Dir: string): Boolean;
+var
+  CurrentPath: string;
+begin
+  if not RegQueryStringValue(
+      HKEY_LOCAL_MACHINE,
+      'SYSTEM\CurrentControlSet\Control\Session Manager\Environment',
+      'Path', CurrentPath)
+  then begin
+    Result := True;
+    Exit;
+  end;
+  Result := Pos(';' + Lowercase(Dir) + ';',
+                ';' + Lowercase(CurrentPath) + ';') = 0;
+end;
+
+{ Broadcast WM_SETTINGCHANGE so the new PATH is picked up by Explorer and
+  any already-running processes without requiring a reboot. }
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  Dummy: DWORD;
+begin
+  if CurStep = ssPostInstall then
+    SendBroadcastMessage(WM_SETTINGCHANGE, 0, 'Environment', Dummy);
+end;

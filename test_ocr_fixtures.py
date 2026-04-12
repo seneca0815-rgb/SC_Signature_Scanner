@@ -63,11 +63,17 @@ FIXTURES = _load_manifest()
 
 def _run_pipeline(png_path: Path) -> list[tuple[str, str | None]]:
     """
-    Load a PNG, run find_orange_regions → ocr_text → lookup_text.
-    Returns list of (raw_ocr, lookup_result) for every detected region.
+    Load a PNG, run the full scan_once() pipeline:
+      find_orange_regions → ocr_text (multi-threshold) →
+      fallback psm6/psm7 → lookup_text.
+
+    Mirrors scan_once() so fixture tests reflect real overlay behaviour,
+    including the fallback path that handles location-pin labels like
+    "L 12585" where the digit-only ocr_text() pass returns empty.
     """
     import cv2
     import numpy as np
+    import pytesseract
     from PIL import Image
     import overlay as ov
 
@@ -79,11 +85,29 @@ def _run_pipeline(png_path: Path) -> list[tuple[str, str | None]]:
     regions = ov.find_orange_regions(bgr)
     results = []
     for region in regions:
-        pil    = ov.region_to_pil(bgr, region)
-        text   = ov.ocr_text(pil)
-        if text:
-            lookup = ov.lookup_text(text)
-            results.append((text, lookup))
+        pil  = ov.region_to_pil(bgr, region)
+        text = ov.ocr_text(pil)
+
+        if ov.MIN_DIGITS <= len(text) <= ov.MAX_DIGITS + 1:
+            candidates = [text]
+        else:
+            # Mirror scan_once() fallback: psm 6 on preprocessed image handles
+            # multi-number panels; psm 7 on the raw crop catches labels with
+            # non-digit prefix (e.g. location-pin icon + "12585").
+            raw_pre  = pytesseract.image_to_string(
+                ov.preprocess(pil), config=r"--psm 6"
+            ).strip()
+            raw_orig = pytesseract.image_to_string(
+                pil, config=r"--psm 7"
+            ).strip()
+            candidates = ov._extract_numbers(raw_pre + " " + raw_orig)
+
+        for candidate in candidates:
+            if not (ov.MIN_DIGITS <= len(candidate) <= ov.MAX_DIGITS + 1):
+                continue
+            lookup = ov.lookup_text(candidate)
+            results.append((candidate, lookup))
+
     return results
 
 

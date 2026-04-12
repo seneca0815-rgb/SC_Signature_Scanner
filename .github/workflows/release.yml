@@ -42,6 +42,7 @@ jobs:
           python test_setup_wizard.py
           python test_integration.py
           python test_ui_acceptance.py
+          python test_installer.py
 
       # ---------------------------------------------------------------
       # Install Tesseract OCR (needed by pytesseract at build time)

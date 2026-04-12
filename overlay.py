@@ -144,11 +144,30 @@ def region_to_pil(bgr: np.ndarray,
     return Image.fromarray(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB))
 
 
-def preprocess(img: Image.Image) -> Image.Image:
-    """Orange-Text-Extraktion + Tesseract-Vorbereitung."""
-    # 4× hochskalieren
+def preprocess(img: Image.Image, threshold: int = 80) -> Image.Image:
+    """
+    Orange-Text-Extraktion + Tesseract-Vorbereitung.
+
+    STRATEGY 1 – Adaptive upscaling (adaptive-ocr branch):
+    Previously the image was always scaled by a fixed 4×, which meant that
+    small regions (e.g. 10 px tall floating labels at high FOV) were only
+    40 px tall after upscale — too small for reliable Tesseract recognition —
+    while larger regions were wastefully large.
+    Now the image is scaled so its height is always exactly 60 px (the
+    empirically good minimum for Tesseract's digit recognition), maintaining
+    the original aspect ratio.  If the region is already taller than 60 px
+    it is left at its original size (scale ≥ 1 is enforced) so we never
+    downscale a region that is already large enough.
+
+    The `threshold` parameter (default 80) is exposed so that ocr_text()
+    can call preprocess() multiple times with different thresholds without
+    duplicating the rest of the pipeline (STRATEGY 2).
+    """
+    # --- STRATEGY 1: adaptive upscaling to TARGET_HEIGHT px tall ---
+    TARGET_HEIGHT = 60
     w, h = img.size
-    img  = img.resize((w * 4, h * 4), Image.LANCZOS)
+    scale = max(1.0, TARGET_HEIGHT / max(h, 1))
+    img   = img.resize((round(w * scale), round(h * scale)), Image.LANCZOS)
 
     # Orange isolieren über R+G-B Kanal
     import PIL.ImageChops as chops
@@ -156,20 +175,58 @@ def preprocess(img: Image.Image) -> Image.Image:
     orange  = chops.subtract(chops.add(r, g), b)
     from PIL import ImageEnhance
     orange  = ImageEnhance.Contrast(orange).enhance(3.0)
-    orange  = orange.point(lambda p: 255 if p > 80 else 0)
+    orange  = orange.point(lambda p: 255 if p > threshold else 0)
     orange  = ImageOps.invert(orange)
     orange  = orange.filter(ImageFilter.SHARPEN)
     return orange
 
 
 def ocr_text(img: Image.Image) -> str:
-    """Gibt erkannte Ziffernfolge zurück, oder ''."""
-    processed = preprocess(img)
-    raw = pytesseract.image_to_string(
-        processed,
-        config=r"--psm 7 -c tessedit_char_whitelist=0123456789"
-    ).strip()
-    return re.sub(r"[^\d]", "", raw)
+    """
+    Gibt erkannte Ziffernfolge zurück, oder ''.
+
+    STRATEGY 2 – Multi-threshold scanning (adaptive-ocr branch):
+    A single fixed threshold (previously 80) clips faint strokes at low
+    values and over-fills thick strokes at high values, causing Tesseract
+    to misread individual digits.  Running three passes with thresholds
+    60 / 90 / 120 covers the full brightness range of orange text and lets
+    us pick the best result:
+
+      Priority 1 – exact key match in the lookup table (highest confidence)
+      Priority 2 – fuzzy match within FUZZY_MAX_DIST (still a real hit)
+      Priority 3 – majority vote across the three results (tie-break)
+
+    If all three passes return the same string the overhead is negligible
+    in practice because Tesseract's bottleneck is model loading, not pixel
+    differences this small.
+    """
+    candidates: list[str] = []
+    for thresh in (60, 90, 120):
+        processed = preprocess(img, threshold=thresh)
+        raw = pytesseract.image_to_string(
+            processed,
+            config=r"--psm 7 -c tessedit_char_whitelist=0123456789"
+        ).strip()
+        cleaned = re.sub(r"[^\d]", "", raw)
+        if cleaned:
+            candidates.append(cleaned)
+
+    if not candidates:
+        return ""
+
+    # Priority 1: exact key in the lookup table
+    for c in candidates:
+        if c in lookup:
+            return c
+
+    # Priority 2: any fuzzy / substring match in the lookup table
+    for c in candidates:
+        if lookup_text(c) is not None:
+            return c
+
+    # Priority 3: majority vote across thresholds
+    from collections import Counter
+    return Counter(candidates).most_common(1)[0][0]
 
 
 # ---------------------------------------------------------------------------
