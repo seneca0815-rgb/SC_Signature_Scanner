@@ -51,9 +51,9 @@ THEMES = load_themes()
 # ---------------------------------------------------------------------------
 
 RESOLUTIONS = {
-    "1920 × 1080":  {"top": 230, "left":  860, "width": 200, "height": 220},
-    "2560 × 1440":  {"top": 300, "left": 1100, "width": 300, "height": 300},
-    "3440 × 1440":  {"top": 300, "left": 1420, "width": 400, "height": 300},
+    "1920 × 1080":  {"top": 100, "left": 150, "width": 1620, "height": 680},
+    "2560 × 1440":  {"top": 130, "left": 200, "width": 2160, "height": 900},
+    "3440 × 1440":  {"top": 130, "left": 200, "width": 3040, "height": 900},
     "Custom (edit config.json manually)": None,
 }
 

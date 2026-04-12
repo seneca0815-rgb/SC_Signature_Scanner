@@ -118,7 +118,7 @@ python overlay.py
 | `hsv_high` | Upper HSV bound for orange | `[35, 255, 255]` |
 | `min_area` | Minimum region area (px²) | `120` |
 | `aspect_min` | Minimum width/height ratio | `2.0` |
-| `aspect_max` | Maximum width/height ratio | `4.0` |
+| `aspect_max` | Maximum width/height ratio | `6.0` |
 | `region_padding` | Pixel padding around detected region | `8` |
 | `vote_frames` | Number of frames for majority vote | `3` |
 | `interval_ms` | Scan frequency in milliseconds | `500` |
@@ -131,7 +131,7 @@ python overlay.py
 
 ```json
 {
-  "scan_region": { "top": 300, "left": 1100, "width": 300, "height": 300 },
+  "scan_region": { "top": 130, "left": 200, "width": 2160, "height": 900 },
   "hsv_low":  [5,  80,  80],
   "hsv_high": [35, 255, 255],
   "min_area": 120,
@@ -157,9 +157,13 @@ python overlay.py
 
 | Resolution | top | left | width | height |
 |---|---|---|---|---|
-| 1920×1080 | 230 | 860 | 200 | 220 |
-| 2560×1440 | 300 | 1100 | 300 | 300 |
-| 3440×1440 | 300 | 1420 | 400 | 300 |
+| 1920×1080 | 100 | 150 | 1620 | 680 |
+| 2560×1440 | 130 | 200 | 2160 | 900 |
+| 3440×1440 | 130 | 200 | 3040 | 900 |
+
+> **Note:** The region covers the full game viewport (space view, above the cockpit dashboard).
+> Rock labels float anywhere on screen depending on camera angle, so a full-width region is required.
+> The orange "UNKNOWN" label (pre-scan state) is automatically ignored — it contains no digits.
 
 ---
 

@@ -206,7 +206,9 @@ def normalize(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 def _extract_numbers(text: str) -> list[str]:
-    return re.findall(r"\d{4,6}", _normalize_digits(text))
+    # Strip thousands separators so "3,593" and "14.983" are found correctly
+    clean = re.sub(r"[,.]", "", text)
+    return re.findall(r"\d{4,6}", _normalize_digits(clean))
 
 
 def lookup_text(raw: str) -> str | None:
@@ -248,13 +250,29 @@ def scan_once() -> list[tuple[str, str]]:
         pil  = region_to_pil(bgr, region)
         text = ocr_text(pil)
 
-        if not (MIN_DIGITS <= len(text) <= MAX_DIGITS + 1):
-            continue        # zu kurz oder zu lang → kein Signaturwert
+        if MIN_DIGITS <= len(text) <= MAX_DIGITS + 1:
+            # Clean single number from digit-only OCR
+            candidates = [text]
+        else:
+            # Digit-only pass failed or returned too many digits.
+            # Try two fallback modes and merge: psm 6 (block) on preprocessed
+            # image handles multi-number panels; psm 7 on the raw image works
+            # well for wider, lower-contrast labels.
+            raw_pre  = pytesseract.image_to_string(
+                preprocess(pil), config=r"--psm 6"
+            ).strip()
+            raw_orig = pytesseract.image_to_string(
+                pil, config=r"--psm 7"
+            ).strip()
+            candidates = _extract_numbers(raw_pre + " " + raw_orig)
 
-        result = lookup_text(text)
-        print(f"[OCR] '{text}'  →  {result}")
-        if result:
-            hits.append((text, result))
+        for candidate in candidates:
+            if not (MIN_DIGITS <= len(candidate) <= MAX_DIGITS + 1):
+                continue
+            result = lookup_text(candidate)
+            print(f"[OCR] '{candidate}'  →  {result}")
+            if result:
+                hits.append((candidate, result))
 
     return hits
 

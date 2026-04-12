@@ -178,7 +178,7 @@ For other resolutions or custom FOV settings, select **Custom** in the wizard
 and adjust `scan_region` manually in `config.json`:
 
 ```json
-"scan_region": { "top": 300, "left": 1100, "width": 300, "height": 300 }
+"scan_region": { "top": 130, "left": 200, "width": 2160, "height": 900 }
 ```
 
 Use `find_roi.py` (developer tool) to help identify the correct region for

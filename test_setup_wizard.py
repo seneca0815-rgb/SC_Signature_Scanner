@@ -141,8 +141,8 @@ class TestConfigPersistence(unittest.TestCase):
         with open(self.config_path) as f:
             cfg = json.load(f)
         self.assertIn("scan_region", cfg)
-        self.assertEqual(cfg["scan_region"]["top"], 300)
-        self.assertEqual(cfg["scan_region"]["left"], 1100)
+        self.assertEqual(cfg["scan_region"]["top"], 130)
+        self.assertEqual(cfg["scan_region"]["left"], 200)
 
     def test_theme_written_to_config(self):
         self._run_save("1920 × 1080", "minimal")
