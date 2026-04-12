@@ -324,15 +324,15 @@ class SetupWizard:
     def _page_hotkey(self):
         f = self._frame
         tk.Label(f, text="Scanner hotkey", bg=C_BG, fg=C_TEXT,
-                 font=("Consolas", 15, "bold")).pack(anchor="w", pady=(24, 4))
+                 font=("Consolas", 15, "bold")).pack(anchor="w", pady=(14, 4))
         tk.Label(f,
                  text="Choose a key to pause / resume the scanner while in-game.",
                  bg=C_BG, fg=C_MUTED,
-                 font=("Consolas", 11)).pack(anchor="w", pady=(0, 20))
+                 font=("Consolas", 11)).pack(anchor="w", pady=(0, 10))
 
         for label in HOTKEYS:
             row = tk.Frame(f, bg=C_BG)
-            row.pack(fill="x", pady=3)
+            row.pack(fill="x", pady=2)
             tk.Radiobutton(
                 row,
                 text=label,
@@ -353,7 +353,7 @@ class SetupWizard:
                  ),
                  bg=C_BG, fg=C_MUTED,
                  font=("Consolas", 10), justify="left").pack(
-                     anchor="w", pady=(20, 0))
+                     anchor="w", pady=(10, 0))
 
     def _page_finish(self):
         f = self._frame
