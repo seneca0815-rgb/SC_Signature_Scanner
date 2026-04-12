@@ -92,6 +92,9 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 Type: files; Name: "{app}\config.json"
 
 [Code]
+const
+  WM_SETTINGCHANGE = 26;  { not predefined in Inno Setup Pascal }
+
 { Returns True when Dir is not already present in the system PATH,
   so the [Registry] entry is only written when actually needed. }
 function NeedsAddPath(Dir: string): Boolean;
