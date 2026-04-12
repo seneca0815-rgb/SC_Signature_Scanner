@@ -39,6 +39,7 @@ Source: "theme_preview.png";          DestDir: "{app}"; Flags: ignoreversion
 
 ; Brand assets
 Source: "vargo_icon.ico";            DestDir: "{app}"; Flags: ignoreversion
+Source: "vargo_icon_256.png";        DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 
 ; Tesseract installer (bundled in redist\ folder)
 Source: "redist\tesseract-setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall

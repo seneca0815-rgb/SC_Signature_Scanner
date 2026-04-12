@@ -79,13 +79,20 @@ jobs:
           --add-data "lookup.json;."
           --add-data "themes.py;."
           --add-data "setup_wizard.py;."
+          --add-data "overlay.py;."
+          --add-data "app_state.py;."
+          --add-data "overlay_window.py;."
+          --add-data "control_panel.py;."
+          --add-data "tray_icon.py;."
           --name "SCSigReader"
 
       - name: Copy data files to dist
         shell: pwsh
         run: |
-          Copy-Item -Path config.json  -Destination dist\config.json
-          Copy-Item -Path lookup.json  -Destination dist\lookup.json
+          Copy-Item -Path config.json          -Destination dist\config.json
+          Copy-Item -Path lookup.json          -Destination dist\lookup.json
+          Copy-Item -Path themes.py            -Destination dist\themes.py
+          Copy-Item -Path vargo_icon_256.png   -Destination dist\vargo_icon_256.png -ErrorAction SilentlyContinue
 
       # ---------------------------------------------------------------
       # Build installer with Inno Setup
