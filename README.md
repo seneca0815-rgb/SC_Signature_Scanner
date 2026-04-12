@@ -199,6 +199,7 @@ sc_signature_reader/
 ├── setup_wizard.py             ← first-run configuration wizard
 ├── lookup.json                 ← 163 signature values
 ├── config.example.json         ← config template (copy to config.json)
+├── requirements.txt            ← Python runtime dependencies
 ├── SCSigReader.iss             ← Inno Setup installer script
 ├── test_core.py                ← unit tests (81 tests)
 ├── test_setup_wizard.py        ← wizard acceptance tests (20 tests)
@@ -207,6 +208,9 @@ sc_signature_reader/
 ├── find_roi.py                 ← scan region calibration helper
 ├── debug_script.py             ← screenshot region analysis
 ├── generate_theme_preview.py   ← renders theme_preview.png
+├── .github/workflows/
+│   ├── ci.yml                  ← run tests on push/PR
+│   └── release.yml             ← build installer on version tag
 ├── LICENSE
 ├── DISCLAIMER.md
 └── README.md

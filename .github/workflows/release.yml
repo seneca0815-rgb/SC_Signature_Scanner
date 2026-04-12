@@ -1,0 +1,88 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pyinstaller
+
+      # ---------------------------------------------------------------
+      # Gate: all tests must pass before building
+      # ---------------------------------------------------------------
+      - name: Run tests
+        run: |
+          python test_core.py
+          python test_setup_wizard.py
+          python test_integration.py
+
+      # ---------------------------------------------------------------
+      # Install Tesseract OCR (needed by pytesseract at build time)
+      # ---------------------------------------------------------------
+      - name: Install Tesseract OCR
+        run: choco install tesseract --yes
+
+      # ---------------------------------------------------------------
+      # Download Tesseract installer for bundling in the setup package
+      # ---------------------------------------------------------------
+      - name: Download Tesseract installer for redist
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path redist | Out-Null
+          $url = "https://github.com/UB-Mannheim/tesseract/releases/download/v5.5.0.20241111/tesseract-ocr-w64-setup-5.5.0.20241111.exe"
+          Invoke-WebRequest -Uri $url -OutFile "redist\tesseract-setup.exe"
+
+      # ---------------------------------------------------------------
+      # Build exe with PyInstaller
+      # ---------------------------------------------------------------
+      - name: Build exe
+        run: >
+          pyinstaller overlay.py
+          --onefile --noconsole
+          --add-data "config.example.json;."
+          --add-data "lookup.json;."
+          --add-data "themes.py;."
+          --add-data "setup_wizard.py;."
+          --name "SCSigReader"
+
+      # ---------------------------------------------------------------
+      # Prepare data files expected by the installer
+      # ---------------------------------------------------------------
+      - name: Prepare config.json from example
+        run: copy config.example.json config.json
+        shell: cmd
+
+      - name: Generate theme_preview.png
+        run: python generate_theme_preview.py
+
+      # ---------------------------------------------------------------
+      # Build installer with Inno Setup
+      # ---------------------------------------------------------------
+      - name: Install Inno Setup
+        run: choco install innosetup --yes
+
+      - name: Build installer
+        shell: cmd
+        run: '"%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" SCSigReader.iss'
+
+      # ---------------------------------------------------------------
+      # Publish GitHub Release
+      # ---------------------------------------------------------------
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: installer/SCSigReader_Setup_1.0.exe
+          generate_release_notes: true
