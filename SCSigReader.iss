@@ -65,7 +65,7 @@ Filename: "{app}\{#AppExe}"; \
 [Icons]
 Name: "{group}\{#AppName}";           Filename: "{app}\{#AppExe}"
 Name: "{group}\Uninstall";            Filename: "{uninstallexe}"
-Name: "{commondesktop}\{#AppName}";   Filename: "{app}\{#AppExe}"; Tasks: desktopicon
+Name: "{commondesktop}\{#AppName}";   Filename: "{app}\{#AppExe}"; IconFilename: "{app}\vargo_icon.ico"; Tasks: desktopicon
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"

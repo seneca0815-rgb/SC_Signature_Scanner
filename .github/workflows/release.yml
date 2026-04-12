@@ -84,6 +84,7 @@ jobs:
           --add-data "overlay_window.py;."
           --add-data "control_panel.py;."
           --add-data "tray_icon.py;."
+          --icon "vargo_icon.ico"
           --name "SCSigReader"
 
       - name: Copy data files to dist
