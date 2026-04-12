@@ -47,13 +47,16 @@ jobs:
 
       # ---------------------------------------------------------------
       # Download Tesseract installer for bundling in the setup package
+      # Fetches the latest w64 setup exe from UB-Mannheim via GitHub API
       # ---------------------------------------------------------------
       - name: Download Tesseract installer for redist
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path redist | Out-Null
-          $url = "https://github.com/UB-Mannheim/tesseract/releases/download/v5.5.0.20241111/tesseract-ocr-w64-setup-5.5.0.20241111.exe"
-          Invoke-WebRequest -Uri $url -OutFile "redist\tesseract-setup.exe"
+          $release = Invoke-RestMethod -Uri "https://api.github.com/repos/UB-Mannheim/tesseract/releases/latest"
+          $asset   = $release.assets | Where-Object { $_.name -like "tesseract-ocr-w64-setup-*.exe" } | Select-Object -First 1
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "redist\tesseract-setup.exe"
+          Write-Host "Downloaded $($asset.name)"
 
       # ---------------------------------------------------------------
       # Build exe with PyInstaller
