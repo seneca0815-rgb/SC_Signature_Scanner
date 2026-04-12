@@ -74,6 +74,12 @@ jobs:
           --add-data "setup_wizard.py;."
           --name "SCSigReader"
 
+      - name: Copy data files to dist
+        shell: pwsh
+        run: |
+          Copy-Item -Path config.json  -Destination dist\config.json
+          Copy-Item -Path lookup.json  -Destination dist\lookup.json
+
       # ---------------------------------------------------------------
       # Build installer with Inno Setup
       # ---------------------------------------------------------------
