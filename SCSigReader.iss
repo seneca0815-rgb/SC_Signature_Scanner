@@ -93,7 +93,16 @@ Type: files; Name: "{app}\config.json"
 
 [Code]
 const
-  WM_SETTINGCHANGE = 26;  { not predefined in Inno Setup Pascal }
+  WM_SETTINGCHANGE  = 26;
+  HWND_BROADCAST    = $FFFF;
+  SMTO_ABORTIFHUNG  = 2;
+
+{ SendBroadcastMessage in Inno Setup Pascal does not accept a string LParam.
+  Import SendMessageTimeoutA directly so we can pass 'Environment'. }
+function SendMessageTimeout(hWnd: HWND; Msg: UINT; wParam: WPARAM;
+  lParam: PAnsiChar; fuFlags: UINT; uTimeout: UINT;
+  var lpdwResult: DWORD): LRESULT;
+  external 'SendMessageTimeoutA@user32.dll stdcall';
 
 { Returns True when Dir is not already present in the system PATH,
   so the [Registry] entry is only written when actually needed. }
@@ -120,5 +129,6 @@ var
   Dummy: DWORD;
 begin
   if CurStep = ssPostInstall then
-    SendBroadcastMessage(WM_SETTINGCHANGE, 0, 'Environment', Dummy);
+    SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, 0, 'Environment',
+                       SMTO_ABORTIFHUNG, 5000, Dummy);
 end;
