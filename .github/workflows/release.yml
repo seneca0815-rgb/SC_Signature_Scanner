@@ -72,7 +72,7 @@ jobs:
       # ---------------------------------------------------------------
       - name: Build exe
         run: >
-          pyinstaller overlay.py
+          pyinstaller main.py
           --onefile --noconsole
           --add-data "config.example.json;."
           --add-data "lookup.json;."
