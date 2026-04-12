@@ -205,8 +205,8 @@ class TestInstallerManifest(unittest.TestCase):
 
     ISS_PATH = PROJECT_ROOT / "SCSigReader.iss"
 
-    # Files we can't check in a dev environment (built artifacts / redist)
-    SKIP_PATTERNS = {"dist\\", "redist\\"}
+    # Files absent in a clean checkout — either built artifacts or generated
+    SKIP_PATTERNS = {"dist\\", "redist\\", "config.json", "theme_preview.png"}
 
     def _parse_source_files(self) -> list[Path]:
         """Extract Source: paths from the [Files] section of the .iss script."""
