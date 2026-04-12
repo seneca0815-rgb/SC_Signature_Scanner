@@ -131,17 +131,9 @@ def main():
         print(f"[main] lookup.json not found at {LOOKUP_PATH}")
         sys.exit(1)
 
-    # Inject into overlay module
+    # Initialise overlay module (loads config+lookup, applies theme, sets globals)
     import overlay as ov
-    ov.config  = config
-    ov.lookup  = lookup
-    ov.ROI     = config.get("scan_region") or config.get("roi", {})
-    ov.INTERVAL = config.get("interval_ms", 500) / 1000
-    ov.FUZZY_MAX_DIST = config.get("fuzzy_max_distance", 1)
-
-    import pytesseract
-    pytesseract.pytesseract.tesseract_cmd = config.get(
-        "tesseract_cmd", "tesseract")
+    ov.init(CONFIG_PATH, LOOKUP_PATH)
 
     # --- Shared state ---
     state = AppState(config)

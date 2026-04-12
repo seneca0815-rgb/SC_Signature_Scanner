@@ -43,48 +43,58 @@ def load_json(path: Path) -> dict:
         return json.load(f)
 
 
-config = load_json(CONFIG_PATH)
-lookup: dict[str, str] = load_json(LOOKUP_PATH)
+# ---------------------------------------------------------------------------
+# Module-level defaults — populated by init()
+# ---------------------------------------------------------------------------
+config:         dict  = {}
+lookup:         dict  = {}
+ROI:            dict  = {}
+INTERVAL:       float = 0.5
+CONFIDENCE:     int   = 60
+FUZZY_MAX_DIST: int   = 1
+MIN_DIGITS = 4
+MAX_DIGITS = 5
 
-pytesseract.pytesseract.tesseract_cmd = config.get(
-    "tesseract_cmd", "tesseract"
-)
+_HSV_LOW  = np.array([8,  120, 120], dtype=np.uint8)
+_HSV_HIGH = np.array([30, 255, 255], dtype=np.uint8)
+_MIN_AREA = 200
+_PADDING  = 6
 
-#set theme
-theme_name = config.get("theme", "dark-gold")
-theme = THEMES.get(theme_name, THEMES["dark-gold"])
-# theme-Werte überschreiben config-Werte
-config = {**config, **theme}
 
-# Scan-Bereich: ganzer Bildschirm oder eingeschränkter Bereich aus config
-SCAN_REGION: dict = config.get("scan_region", {
-    "top": 0, "left": 0, "width": 1920, "height": 1080
-})
-INTERVAL: float    = config.get("interval_ms", 500) / 1000
-FUZZY_MAX_DIST: int = config.get("fuzzy_max_distance", 1)
-MIN_DIGITS      = 4   # Signaturen sind mindestens 4-stellig
-MAX_DIGITS      = 5
+def init(config_path: Path, lookup_path: Path) -> None:
+    """Load config and lookup, apply theme, initialise all module globals."""
+    global config, lookup, ROI, INTERVAL, CONFIDENCE, FUZZY_MAX_DIST
+    global _HSV_LOW, _HSV_HIGH, _MIN_AREA, _PADDING
+
+    config = load_json(config_path)
+    lookup = load_json(lookup_path)
+
+    pytesseract.pytesseract.tesseract_cmd = config.get("tesseract_cmd", "tesseract")
+
+    theme_name = config.get("theme", "vargo")
+    theme = THEMES.get(theme_name, THEMES.get("vargo", list(THEMES.values())[0]))
+    config = {**config, **theme}
+
+    ROI            = config.get("scan_region") or config.get("roi", {})
+    INTERVAL       = config.get("interval_ms", 500) / 1000
+    CONFIDENCE     = config.get("ocr_confidence", 60)
+    FUZZY_MAX_DIST = config.get("fuzzy_max_distance", 1)
+
+    _HSV_LOW  = np.array(config.get("hsv_low",  [8,  120, 120]), dtype=np.uint8)
+    _HSV_HIGH = np.array(config.get("hsv_high", [30, 255, 255]), dtype=np.uint8)
+    _MIN_AREA = config.get("min_area", 200)
+    _PADDING  = config.get("region_padding", 6)
 
 
 # ---------------------------------------------------------------------------
 # Schritt 1: Screenshot → orange Regionen finden
 # ---------------------------------------------------------------------------
 
-# HSV-Bereich für SC-Orange (Farbe der Signaturnummern)
-# Werte können in config.json überschrieben werden
-_HSV_LOW  = np.array(config.get("hsv_low",  [8,  120, 120]), dtype=np.uint8)
-_HSV_HIGH = np.array(config.get("hsv_high", [30, 255, 255]), dtype=np.uint8)
-
-# Mindestgröße einer Region in Pixeln (filtert Rauschen heraus)
-_MIN_AREA = config.get("min_area", 200)
-# Padding um jede gefundene Region (gibt Tesseract etwas Luft)
-_PADDING  = config.get("region_padding", 6)
-
 
 def grab_screen() -> np.ndarray:
     """Screenshot als BGR-numpy-Array."""
     with mss.mss() as sct:
-        raw = sct.grab(SCAN_REGION)
+        raw = sct.grab(ROI)
         img = np.frombuffer(raw.bgra, dtype=np.uint8)
         img = img.reshape((raw.height, raw.width, 4))
         return cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
