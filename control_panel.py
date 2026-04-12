@@ -1,0 +1,335 @@
+"""
+control_panel.py  –  SC Signature Reader / Vargo Dynamics
+Main control window. Always visible on startup.
+Minimises to tray on close – does NOT exit the app.
+"""
+
+import tkinter as tk
+from tkinter import ttk
+from pathlib import Path
+import importlib.util
+
+from app_state import AppState
+
+# ---------------------------------------------------------------------------
+# Brand colours
+# ---------------------------------------------------------------------------
+
+C_BG      = "#1a1a2a"
+C_SURFACE = "#12121e"
+C_BORDER  = "#2a3a4a"
+C_CYAN    = "#4fc3c3"
+C_GOLD    = "#c9a84c"
+C_TEXT    = "#d8d8e8"
+C_MUTED   = "#607080"
+C_RED     = "#c94f4f"
+C_GREEN   = "#4fc97a"
+
+
+def _load_themes(base_dir: Path) -> dict:
+    spec   = importlib.util.spec_from_file_location(
+        "themes", base_dir / "themes.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.THEMES
+
+
+# ---------------------------------------------------------------------------
+# ControlPanel
+# ---------------------------------------------------------------------------
+
+class ControlPanel:
+
+    def __init__(self, root: tk.Tk, config: dict, state: AppState,
+                 overlay, base_dir: Path):
+        self._root      = root
+        self._config    = config
+        self._state     = state
+        self._overlay   = overlay
+        self._base_dir  = base_dir
+        self._themes    = _load_themes(base_dir)
+        self._minimised = False
+
+        self._win = tk.Toplevel(root)
+        self._win.title("Vargo Dynamics  ·  SC Signature Reader")
+        self._win.configure(bg=C_BG)
+        self._win.resizable(False, False)
+        self._win.geometry("340x520")
+        self._win.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        # Centre on screen
+        self._win.update_idletasks()
+        sw = self._win.winfo_screenwidth()
+        sh = self._win.winfo_screenheight()
+        x  = (sw - 340) // 2
+        y  = (sh - 520) // 2
+        self._win.geometry(f"340x520+{x}+{y}")
+
+        self._build_ui()
+
+        # Register for state changes
+        state.register_callback(self._on_state_change)
+
+    # ------------------------------------------------------------------
+    # Build UI
+    # ------------------------------------------------------------------
+
+    def _build_ui(self):
+        w = self._win
+
+        # ── Header ──────────────────────────────────────────────────────
+        hdr = tk.Frame(w, bg=C_BG)
+        hdr.pack(fill="x", padx=0)
+
+        # Cyan top bar
+        tk.Frame(hdr, bg=C_CYAN, height=2).pack(fill="x")
+
+        inner_hdr = tk.Frame(hdr, bg=C_SURFACE)
+        inner_hdr.pack(fill="x")
+
+        tk.Label(inner_hdr, text="VARGO",
+                 bg=C_SURFACE, fg=C_TEXT,
+                 font=("Courier New", 18, "bold"),
+                 padx=16, pady=10).pack(side="left")
+
+        tk.Label(inner_hdr, text="DYNAMICS",
+                 bg=C_SURFACE, fg=C_CYAN,
+                 font=("Courier New", 9),
+                 padx=0).pack(side="left", anchor="s", pady=14)
+
+        tk.Label(inner_hdr, text="SC Signature Reader",
+                 bg=C_SURFACE, fg=C_MUTED,
+                 font=("Courier New", 9),
+                 padx=16).pack(side="right", anchor="s", pady=14)
+
+        tk.Frame(hdr, bg=C_BORDER, height=1).pack(fill="x")
+
+        # ── Scanner toggle ───────────────────────────────────────────────
+        self._build_section(w, "SCANNER")
+
+        toggle_row = tk.Frame(w, bg=C_BG)
+        toggle_row.pack(fill="x", padx=16, pady=(0, 4))
+
+        self._status_dot = tk.Label(toggle_row, text="●",
+                                    bg=C_BG, fg=C_GREEN,
+                                    font=("Courier New", 14))
+        self._status_dot.pack(side="left")
+
+        self._status_lbl = tk.Label(toggle_row, text="ACTIVE",
+                                    bg=C_BG, fg=C_GREEN,
+                                    font=("Courier New", 11, "bold"),
+                                    padx=6)
+        self._status_lbl.pack(side="left")
+
+        self._toggle_btn = tk.Button(
+            toggle_row, text="PAUSE",
+            bg=C_BORDER, fg=C_TEXT,
+            activebackground=C_SURFACE, activeforeground=C_CYAN,
+            font=("Courier New", 10), relief="flat",
+            padx=12, pady=4,
+            command=self._on_toggle)
+        self._toggle_btn.pack(side="right")
+
+        hotkey = self._config.get("hotkey", "F9")
+        tk.Label(w, text=f"Hotkey: {hotkey}",
+                 bg=C_BG, fg=C_MUTED,
+                 font=("Courier New", 9),
+                 padx=16).pack(anchor="w")
+
+        self._build_divider(w)
+
+        # ── Last signal ──────────────────────────────────────────────────
+        self._build_section(w, "LAST SIGNAL")
+
+        self._signal_frame = tk.Frame(w, bg=C_SURFACE,
+                                      highlightbackground=C_BORDER,
+                                      highlightthickness=1)
+        self._signal_frame.pack(fill="x", padx=16, pady=(0, 4))
+
+        self._signal_lbl = tk.Label(
+            self._signal_frame,
+            text="–  no signal",
+            bg=C_SURFACE, fg=C_MUTED,
+            font=("Courier New", 12),
+            padx=12, pady=8, anchor="w")
+        self._signal_lbl.pack(fill="x")
+
+        self._build_divider(w)
+
+        # ── Theme selector ───────────────────────────────────────────────
+        self._build_section(w, "THEME")
+
+        theme_row = tk.Frame(w, bg=C_BG)
+        theme_row.pack(fill="x", padx=16, pady=(0, 4))
+
+        self._theme_var = tk.StringVar(
+            value=self._state.active_theme
+                  if self._state.active_theme in self._themes
+                  else list(self._themes.keys())[0])
+
+        style = ttk.Style()
+        style.theme_use("clam")
+        style.configure("Vargo.TCombobox",
+                         fieldbackground=C_SURFACE,
+                         background=C_SURFACE,
+                         foreground=C_TEXT,
+                         selectbackground=C_BORDER,
+                         selectforeground=C_CYAN,
+                         arrowcolor=C_CYAN,
+                         bordercolor=C_BORDER,
+                         lightcolor=C_BORDER,
+                         darkcolor=C_BORDER)
+
+        combo = ttk.Combobox(
+            theme_row,
+            textvariable=self._theme_var,
+            values=list(self._themes.keys()),
+            state="readonly",
+            style="Vargo.TCombobox",
+            font=("Courier New", 11),
+            width=18)
+        combo.pack(side="left")
+        combo.bind("<<ComboboxSelected>>", self._on_theme_change)
+
+        # Theme preview pill
+        self._theme_preview = tk.Label(
+            theme_row,
+            text="  preview  ",
+            font=("Courier New", 10),
+            padx=8, pady=4)
+        self._theme_preview.pack(side="right")
+        self._refresh_theme_preview()
+
+        self._build_divider(w)
+
+        # ── Recent signals ───────────────────────────────────────────────
+        self._build_section(w, "RECENT SIGNALS")
+
+        self._recent_frame = tk.Frame(w, bg=C_SURFACE,
+                                      highlightbackground=C_BORDER,
+                                      highlightthickness=1)
+        self._recent_frame.pack(fill="x", padx=16, pady=(0, 4))
+
+        self._recent_labels = []
+        for _ in range(5):
+            lbl = tk.Label(self._recent_frame,
+                           text="",
+                           bg=C_SURFACE, fg=C_MUTED,
+                           font=("Courier New", 10),
+                           padx=10, pady=2, anchor="w")
+            lbl.pack(fill="x")
+            self._recent_labels.append(lbl)
+
+        self._build_divider(w)
+
+        # ── Buttons ──────────────────────────────────────────────────────
+        btn_row = tk.Frame(w, bg=C_BG)
+        btn_row.pack(fill="x", padx=16, pady=12)
+
+        tk.Button(btn_row, text="MINIMISE TO TRAY",
+                  bg=C_BORDER, fg=C_TEXT,
+                  activebackground=C_SURFACE, activeforeground=C_CYAN,
+                  font=("Courier New", 10), relief="flat",
+                  padx=10, pady=6,
+                  command=self._on_close).pack(side="left")
+
+        tk.Button(btn_row, text="EXIT",
+                  bg=C_SURFACE, fg=C_RED,
+                  activebackground=C_BORDER, activeforeground=C_RED,
+                  font=("Courier New", 10, "bold"), relief="flat",
+                  padx=10, pady=6,
+                  command=self._on_exit).pack(side="right")
+
+        # Bottom cyan bar
+        tk.Frame(w, bg=C_CYAN, height=2).pack(fill="x", side="bottom")
+
+    def _build_section(self, parent, title: str):
+        row = tk.Frame(parent, bg=C_BG)
+        row.pack(fill="x", padx=16, pady=(10, 2))
+        tk.Label(row, text=title,
+                 bg=C_BG, fg=C_GOLD,
+                 font=("Courier New", 8),
+                 padx=0).pack(side="left")
+        tk.Frame(row, bg=C_BORDER, height=1).pack(
+            side="left", fill="x", expand=True, padx=(8, 0), pady=4)
+
+    def _build_divider(self, parent):
+        tk.Frame(parent, bg=C_BORDER, height=1).pack(
+            fill="x", padx=0, pady=4)
+
+    # ------------------------------------------------------------------
+    # Event handlers
+    # ------------------------------------------------------------------
+
+    def _on_toggle(self):
+        self._state.toggle_pause()
+
+    def _on_theme_change(self, _event=None):
+        name  = self._theme_var.get()
+        theme = self._themes.get(name)
+        if theme:
+            self._state.set_theme(name)
+            self._overlay.apply_theme(theme)
+            self._refresh_theme_preview()
+
+    def _on_close(self):
+        """Minimise to tray instead of closing."""
+        self._win.withdraw()
+        self._minimised = True
+
+    def _on_exit(self):
+        self._state.running = False
+        self._root.quit()
+
+    # ------------------------------------------------------------------
+    # State sync
+    # ------------------------------------------------------------------
+
+    def _on_state_change(self):
+        """Called by AppState – routes to tkinter thread."""
+        self._root.after(0, self._refresh_ui)
+
+    def _refresh_ui(self):
+        # Status dot and label
+        if self._state.paused:
+            self._status_dot.config(fg=C_RED)
+            self._status_lbl.config(fg=C_RED,  text="PAUSED")
+            self._toggle_btn.config(text="RESUME")
+        else:
+            self._status_dot.config(fg=C_GREEN)
+            self._status_lbl.config(fg=C_GREEN, text="ACTIVE")
+            self._toggle_btn.config(text="PAUSE")
+
+        # Last signal
+        sig = self._state.last_signal
+        if sig:
+            self._signal_lbl.config(text=f"ℹ  {sig}", fg=C_CYAN)
+        else:
+            self._signal_lbl.config(text="–  no signal", fg=C_MUTED)
+
+        # Recent list
+        recent = self._state.recent_signals
+        for i, lbl in enumerate(self._recent_labels):
+            if i < len(recent):
+                lbl.config(text=f"  {recent[i]}", fg=C_MUTED)
+            else:
+                lbl.config(text="")
+
+    def _refresh_theme_preview(self):
+        name  = self._theme_var.get()
+        theme = self._themes.get(name, {})
+        bg    = theme.get("bg_color", C_SURFACE)
+        fg    = theme.get("fg_color", C_CYAN)
+        self._theme_preview.config(bg=bg, fg=fg)
+
+    # ------------------------------------------------------------------
+    # Tray integration
+    # ------------------------------------------------------------------
+
+    def show(self):
+        self._win.deiconify()
+        self._win.lift()
+        self._minimised = False
+
+    def is_visible(self) -> bool:
+        return not self._minimised
