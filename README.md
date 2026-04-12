@@ -6,6 +6,8 @@ the corresponding mineral name with multiplier.
 
 **ToS-compliant** – no memory reading, no DLL injection, screen analysis only.
 
+→ **[User Manual](USER_MANUAL.md)** — installation, setup wizard, control panel, hotkey, troubleshooting
+
 ---
 
 ## Concept
