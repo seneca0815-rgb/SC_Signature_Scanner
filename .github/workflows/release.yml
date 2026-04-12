@@ -62,6 +62,12 @@ jobs:
           Write-Host "Downloaded $($asset.name)"
 
       # ---------------------------------------------------------------
+      # Generate brand assets (icons, installer BMPs, theme preview)
+      # ---------------------------------------------------------------
+      - name: Generate brand assets
+        run: python generate_assets.py
+
+      # ---------------------------------------------------------------
       # Build exe with PyInstaller
       # ---------------------------------------------------------------
       - name: Build exe

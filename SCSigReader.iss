@@ -18,6 +18,9 @@ OutputDir=installer
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+WizardImageFile=vargo_installer.bmp
+WizardSmallImageFile=vargo_installer_header.bmp
+SetupIconFile=vargo_icon.ico
 UninstallDisplayIcon={app}\{#AppExe}
 PrivilegesRequired=admin
 
@@ -33,6 +36,9 @@ Source: "config.json";                DestDir: "{app}"; Flags: ignoreversion
 Source: "lookup.json";                DestDir: "{app}"; Flags: ignoreversion
 Source: "themes.py";                  DestDir: "{app}"; Flags: ignoreversion
 Source: "theme_preview.png";          DestDir: "{app}"; Flags: ignoreversion
+
+; Brand assets
+Source: "vargo_icon.ico";            DestDir: "{app}"; Flags: ignoreversion
 
 ; Tesseract installer (bundled in redist\ folder)
 Source: "redist\tesseract-setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
