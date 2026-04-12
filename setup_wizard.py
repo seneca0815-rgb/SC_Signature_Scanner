@@ -57,6 +57,16 @@ RESOLUTIONS = {
     "Custom (edit config.json manually)": None,
 }
 
+# Hotkey options: display label → keyboard-library key name
+HOTKEYS = {
+    "Scroll Lock":  "scroll lock",
+    "Pause / Break": "pause",
+    "Insert":       "insert",
+    "F9":           "f9",
+    "F10":          "f10",
+    "F12":          "f12",
+}
+
 # ---------------------------------------------------------------------------
 # Colours
 # ---------------------------------------------------------------------------
@@ -76,7 +86,7 @@ C_BTN_HOV  = "#3a4155"
 # ---------------------------------------------------------------------------
 
 class SetupWizard:
-    STEPS = ["welcome", "resolution", "theme", "finish"]
+    STEPS = ["welcome", "resolution", "theme", "hotkey", "finish"]
 
     def __init__(self):
         self.root = tk.Tk()
@@ -86,10 +96,11 @@ class SetupWizard:
         self.root.configure(bg=C_BG)
         self.root.eval("tk::PlaceWindow . center")
 
-        self._step       = 0
-        self._res_var    = tk.StringVar(value="2560 × 1440")
-        self._theme_var  = tk.StringVar(value="vargo")
-        self._preview_tk = None   # keep reference so GC doesn't collect it
+        self._step        = 0
+        self._res_var     = tk.StringVar(value="2560 × 1440")
+        self._theme_var   = tk.StringVar(value="vargo")
+        self._hotkey_var  = tk.StringVar(value="Scroll Lock")
+        self._preview_tk  = None   # keep reference so GC doesn't collect it
 
         self._build_header()
         self._frame = tk.Frame(self.root, bg=C_BG)
@@ -310,17 +321,53 @@ class SetupWizard:
                             font=tkfont.Font(family="Consolas", size=9),
                             anchor="e")
 
+    def _page_hotkey(self):
+        f = self._frame
+        tk.Label(f, text="Scanner hotkey", bg=C_BG, fg=C_TEXT,
+                 font=("Consolas", 15, "bold")).pack(anchor="w", pady=(24, 4))
+        tk.Label(f,
+                 text="Choose a key to pause / resume the scanner while in-game.",
+                 bg=C_BG, fg=C_MUTED,
+                 font=("Consolas", 11)).pack(anchor="w", pady=(0, 20))
+
+        for label in HOTKEYS:
+            row = tk.Frame(f, bg=C_BG)
+            row.pack(fill="x", pady=3)
+            tk.Radiobutton(
+                row,
+                text=label,
+                variable=self._hotkey_var,
+                value=label,
+                bg=C_BG, fg=C_TEXT,
+                selectcolor=C_SURFACE,
+                activebackground=C_BG,
+                activeforeground=C_ACCENT,
+                font=("Consolas", 12),
+            ).pack(anchor="w")
+
+        tk.Label(f,
+                 text=(
+                     "Scroll Lock and Pause/Break are recommended —\n"
+                     "they are rarely used by Star Citizen or Windows.\n"
+                     "The hotkey can be changed later in config.json."
+                 ),
+                 bg=C_BG, fg=C_MUTED,
+                 font=("Consolas", 10), justify="left").pack(
+                     anchor="w", pady=(20, 0))
+
     def _page_finish(self):
         f = self._frame
         tk.Label(f, text="All done!", bg=C_BG, fg=C_ACCENT,
                  font=("Consolas", 15, "bold")).pack(anchor="w", pady=(24, 8))
 
-        res   = self._res_var.get()
-        theme = self._theme_var.get()
+        res    = self._res_var.get()
+        theme  = self._theme_var.get()
+        hotkey = self._hotkey_var.get()
 
         summary = (
             f"Resolution : {res}\n"
-            f"Theme      : {theme}\n\n"
+            f"Theme      : {theme}\n"
+            f"Hotkey     : {hotkey}\n\n"
             "Click Finish to save your settings\n"
             "and launch SC Signature Reader."
         )
@@ -356,6 +403,9 @@ class SetupWizard:
             cfg["scan_region"] = region
         # Theme
         cfg["theme"] = self._theme_var.get()
+        # Hotkey
+        hotkey_label = self._hotkey_var.get()
+        cfg["hotkey"] = HOTKEYS.get(hotkey_label, "scroll lock")
 
         # Write back
         with open(CONFIG_PATH, "w", encoding="utf-8") as fh:

@@ -561,10 +561,10 @@ class TestSetupWizardUI(unittest.TestCase):
     def test_starts_on_step_0(self):
         self.assertEqual(self.wizard._step, 0)
 
-    def test_step_label_shows_step_1_of_4(self):
+    def test_step_label_shows_step_1_of_5(self):
         text = self.wizard._step_label.cget("text")
         self.assertIn("1", text)
-        self.assertIn("4", text)
+        self.assertIn("5", text)
 
     def test_back_button_disabled_on_first_step(self):
         self.assertEqual(str(self.wizard._btn_back.cget("state")), "disabled")
@@ -624,8 +624,8 @@ class TestSetupWizardUI(unittest.TestCase):
             self._pump()
         self.assertLessEqual(self.wizard._step, last)
 
-    def test_four_steps_total(self):
-        self.assertEqual(len(self.wizard.STEPS), 4)
+    def test_five_steps_total(self):
+        self.assertEqual(len(self.wizard.STEPS), 5)
 
     def test_all_pages_have_a_method(self):
         for step in self.wizard.STEPS:
@@ -660,6 +660,25 @@ class TestSetupWizardUI(unittest.TestCase):
             self._pump()
         n_radios = _count_by_class(self.wizard._frame, "Radiobutton")
         self.assertEqual(n_radios, len(THEMES))
+
+    # --- hotkey page content ---
+
+    def test_hotkey_page_has_widgets(self):
+        for _ in range(3):   # welcome → resolution → theme → hotkey
+            self.wizard._btn_next.invoke()
+            self._pump()
+        self.assertGreater(len(self.wizard._frame.winfo_children()), 0)
+
+    def test_hotkey_page_radio_count_matches_options(self):
+        from setup_wizard import HOTKEYS
+        for _ in range(3):
+            self.wizard._btn_next.invoke()
+            self._pump()
+        n_radios = _count_by_class(self.wizard._frame, "Radiobutton")
+        self.assertEqual(n_radios, len(HOTKEYS))
+
+    def test_default_hotkey_is_scroll_lock(self):
+        self.assertEqual(self.wizard._hotkey_var.get(), "Scroll Lock")
 
     # --- finish page content ---
 
