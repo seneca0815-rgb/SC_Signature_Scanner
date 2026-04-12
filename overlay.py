@@ -91,7 +91,7 @@ def init(config_path: Path, lookup_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def grab_screen() -> np.ndarray:
+def capture_roi() -> np.ndarray:
     """Screenshot als BGR-numpy-Array."""
     with mss.mss() as sct:
         raw = sct.grab(ROI)
@@ -162,7 +162,7 @@ def preprocess(img: Image.Image) -> Image.Image:
     return orange
 
 
-def ocr_region(img: Image.Image) -> str:
+def ocr_text(img: Image.Image) -> str:
     """Gibt erkannte Ziffernfolge zurück, oder ''."""
     processed = preprocess(img)
     raw = pytesseract.image_to_string(
@@ -240,13 +240,13 @@ def scan_once() -> list[tuple[str, str]]:
     Ein Scan-Durchlauf.
     Gibt Liste von (erkannte_zahl, lookup_ergebnis) zurück.
     """
-    bgr     = grab_screen()
+    bgr     = capture_roi()
     regions = find_orange_regions(bgr)
     hits    = []
 
     for region in regions:
         pil  = region_to_pil(bgr, region)
-        text = ocr_region(pil)
+        text = ocr_text(pil)
 
         if not (MIN_DIGITS <= len(text) <= MAX_DIGITS + 1):
             continue        # zu kurz oder zu lang → kein Signaturwert
