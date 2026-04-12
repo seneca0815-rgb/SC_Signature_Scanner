@@ -61,19 +61,12 @@ def _build_scan_loop(state: AppState):
                     time.sleep(0.2)
                     continue
 
-                img    = ov.capture_roi()
-                img    = ov.preprocess(img)
-                text   = ov.ocr_text(img)
+                hits   = ov.scan_once()
+                result = hits[0][1] if hits else ""
 
-                if text:
-                    result = ov.lookup_text(text)
-                    if result != last_key:
-                        last_key = result
-                        state.set_signal(result or "")
-                else:
-                    if last_key is not None:
-                        last_key = None
-                        state.set_signal("")
+                if result != last_key:
+                    last_key = result
+                    state.set_signal(result)
 
             except Exception as exc:
                 print(f"[scan_loop] {exc}")
