@@ -27,6 +27,15 @@ PrivilegesRequired=admin
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
+[Registry]
+; Add Tesseract to the system PATH so it is available to all applications.
+; NeedsAddPath() (defined in [Code] below) prevents duplicate entries.
+Root: HKLM; \
+  Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; \
+  ValueType: expandsz; ValueName: "Path"; \
+  ValueData: "{olddata};C:\Program Files\Tesseract-OCR"; \
+  Check: NeedsAddPath('C:\Program Files\Tesseract-OCR')
+
 [Files]
 ; Main executable (built with PyInstaller)
 Source: "dist\{#AppExe}";             DestDir: "{app}"; Flags: ignoreversion
@@ -72,3 +81,32 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 
 [UninstallDelete]
 Type: files; Name: "{app}\config.json"
+
+[Code]
+{ Returns True when Dir is not already present in the system PATH,
+  so the [Registry] entry is only written when actually needed. }
+function NeedsAddPath(Dir: string): Boolean;
+var
+  CurrentPath: string;
+begin
+  if not RegQueryStringValue(
+      HKEY_LOCAL_MACHINE,
+      'SYSTEM\CurrentControlSet\Control\Session Manager\Environment',
+      'Path', CurrentPath)
+  then begin
+    Result := True;
+    Exit;
+  end;
+  Result := Pos(';' + Lowercase(Dir) + ';',
+                ';' + Lowercase(CurrentPath) + ';') = 0;
+end;
+
+{ Broadcast WM_SETTINGCHANGE so the new PATH is picked up by Explorer and
+  any already-running processes without requiring a reboot. }
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  Dummy: DWORD;
+begin
+  if CurStep = ssPostInstall then
+    SendBroadcastMessage(WM_SETTINGCHANGE, 0, 'Environment', Dummy);
+end;
