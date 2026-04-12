@@ -22,8 +22,8 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Prepare config.json for tests
-        run: copy config.example.json config.json
-        shell: cmd
+        run: Copy-Item -Path config.example.json -Destination config.json -Force
+        shell: pwsh
 
       - name: Run unit tests
         run: python test_core.py

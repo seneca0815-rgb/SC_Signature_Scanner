@@ -33,6 +33,13 @@ for _mod in ("tkinter", "tkinter.font"):
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+# Ensure config.json exists so overlay.py can be imported.
+# In Python 3.11 patch.__enter__() imports the target module immediately,
+# triggering module-level load_json(CONFIG_PATH) before the patch is active.
+_config = PROJECT_ROOT / "config.json"
+if not _config.exists():
+    shutil.copy(PROJECT_ROOT / "config.example.json", _config)
+
 
 # ---------------------------------------------------------------------------
 # Import functions under test
