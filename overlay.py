@@ -181,6 +181,11 @@ def _normalize_digits(text: str) -> str:
     def _r(m): return m.group().translate(_OCR_DIGIT_MAP)
     return re.sub(r"[0-9lI|OoSBZG]{4,6}", _r, text)
 
+_ocr_normalize_digits = _normalize_digits
+
+def normalize(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
+
 def _extract_numbers(text: str) -> list[str]:
     return re.findall(r"\d{4,6}", _normalize_digits(text))
 
