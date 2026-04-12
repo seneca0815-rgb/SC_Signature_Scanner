@@ -88,7 +88,7 @@ class SetupWizard:
 
         self._step       = 0
         self._res_var    = tk.StringVar(value="2560 × 1440")
-        self._theme_var  = tk.StringVar(value=list(THEMES.keys())[0])
+        self._theme_var  = tk.StringVar(value="vargo")
         self._preview_tk = None   # keep reference so GC doesn't collect it
 
         self._build_header()

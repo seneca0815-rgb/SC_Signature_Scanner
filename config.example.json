@@ -17,13 +17,13 @@
   "_tesseract": "Windows default path – adjust if you installed Tesseract elsewhere.",
   "tesseract_cmd": "C:\\Program Files\\Tesseract-OCR\\tesseract.exe",
 
-  "theme": "dark-gold",
+  "theme": "vargo",
 
   "overlay_x": 30,
   "overlay_y": 30,
-  "alpha": 0.88,
-  "bg_color": "#111827",
-  "fg_color": "#e2c97e",
+  "alpha": 0.90,
+  "bg_color": "#1a1a2a",
+  "fg_color": "#4fc3c3",
   "font_family": "Consolas",
   "font_size": 13,
   "wrap_width": 400
