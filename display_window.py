@@ -494,8 +494,18 @@ class DisplayWindow:
     # Drag-to-move
     # ------------------------------------------------------------------
 
+    def _all_widgets(self):
+        """Return self._win and all descendant widgets (recursive)."""
+        result = [self._win]
+        def _collect(w):
+            for child in w.winfo_children():
+                result.append(child)
+                _collect(child)
+        _collect(self._win)
+        return result
+
     def _setup_drag(self):
-        for widget in [self._win] + list(self._win.winfo_descendants()):
+        for widget in self._all_widgets():
             widget.bind("<ButtonPress-1>",   self._drag_start,  add="+")
             widget.bind("<B1-Motion>",       self._drag_motion, add="+")
             widget.bind("<ButtonRelease-1>", self._drag_end,    add="+")
