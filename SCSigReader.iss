@@ -93,9 +93,8 @@ Type: files; Name: "{app}\config.json"
 
 [Code]
 const
-  WM_SETTINGCHANGE  = 26;
-  HWND_BROADCAST    = $FFFF;
-  SMTO_ABORTIFHUNG  = 2;
+  WM_SETTINGCHANGE  = 26;   { not predefined in Inno Setup Pascal }
+  SMTO_ABORTIFHUNG  = 2;    { HWND_BROADCAST is predefined, omitted }
 
 { SendBroadcastMessage in Inno Setup Pascal does not accept a string LParam.
   Import SendMessageTimeoutA directly so we can pass 'Environment'. }
