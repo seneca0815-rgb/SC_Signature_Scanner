@@ -68,9 +68,10 @@ Filename: "{tmp}\tesseract-setup.exe"; \
   StatusMsg: "Installing Tesseract OCR..."; \
   Flags: waituntilterminated
 
-; 2. Patch tesseract_cmd in config.json after Tesseract is installed
+; 2. Patch tesseract_cmd value in config.json after Tesseract is installed.
+; Uses ConvertFrom-Json / ConvertTo-Json to avoid corrupting other keys.
 Filename: "powershell.exe"; \
-  Parameters: "-Command ""(Get-Content '{app}\config.json') -replace 'tesseract', 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe' | Set-Content '{app}\config.json'"""; \
+  Parameters: "-Command ""$c = Get-Content '{app}\config.json' -Raw | ConvertFrom-Json; $c.tesseract_cmd = 'C:\Program Files\Tesseract-OCR\tesseract.exe'; $c | ConvertTo-Json -Depth 10 | Set-Content '{app}\config.json'"""; \
   Flags: runhidden waituntilterminated
 
 ; 3. Launch setup wizard on first start
