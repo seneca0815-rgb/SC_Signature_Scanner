@@ -97,10 +97,11 @@ const
   SMTO_ABORTIFHUNG  = 2;    { HWND_BROADCAST is predefined, omitted }
 
 { SendBroadcastMessage in Inno Setup Pascal does not accept a string LParam.
-  Import SendMessageTimeoutA directly so we can pass 'Environment'. }
-function SendMessageTimeout(hWnd: HWND; Msg: UINT; wParam: WPARAM;
-  lParam: PAnsiChar; fuFlags: UINT; uTimeout: UINT;
-  var lpdwResult: DWORD): LRESULT;
+  Import SendMessageTimeoutA directly so we can pass 'Environment'.
+  Inno Setup Pascal has no UINT/WPARAM/LRESULT aliases — use Cardinal/Integer. }
+function SendMessageTimeout(hWnd: Cardinal; Msg: Cardinal; wParam: Cardinal;
+  lParam: AnsiString; fuFlags: Cardinal; uTimeout: Cardinal;
+  var lpdwResult: DWORD): Integer;
   external 'SendMessageTimeoutA@user32.dll stdcall';
 
 { Returns True when Dir is not already present in the system PATH,
