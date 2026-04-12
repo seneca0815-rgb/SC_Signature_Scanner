@@ -14,10 +14,19 @@ from tkinter import font as tkfont
 from PIL import Image, ImageTk
 
 # ---------------------------------------------------------------------------
+# Base directory – works both as plain Python and PyInstaller frozen exe
+# ---------------------------------------------------------------------------
+
+def get_base_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent
+    return Path(__file__).parent
+
+# ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
 
-BASE_DIR     = Path(__file__).parent
+BASE_DIR     = get_base_dir()
 CONFIG_PATH  = BASE_DIR / "config.json"
 PREVIEW_PATH = BASE_DIR / "theme_preview.png"
 THEMES_PATH  = BASE_DIR / "themes.py"

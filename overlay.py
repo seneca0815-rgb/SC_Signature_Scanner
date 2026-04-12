@@ -21,10 +21,19 @@ import pytesseract
 from PIL import Image, ImageOps, ImageFilter
 
 # ---------------------------------------------------------------------------
+# Base directory – works both as plain Python and PyInstaller frozen exe
+# ---------------------------------------------------------------------------
+
+def get_base_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent
+    return Path(__file__).parent
+
+# ---------------------------------------------------------------------------
 # Konfiguration laden
 # ---------------------------------------------------------------------------
-CONFIG_PATH = Path(__file__).parent / "config.json"
-LOOKUP_PATH = Path(__file__).parent / "lookup.json"
+CONFIG_PATH = get_base_dir() / "config.json"
+LOOKUP_PATH = get_base_dir() / "lookup.json"
 
 
 
