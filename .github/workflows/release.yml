@@ -83,6 +83,7 @@ jobs:
           --add-data "overlay.py;."
           --add-data "app_state.py;."
           --add-data "overlay_window.py;."
+          --add-data "display_window.py;."
           --add-data "control_panel.py;."
           --add-data "tray_icon.py;."
           --icon "vargo_icon.ico"
