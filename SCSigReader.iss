@@ -28,13 +28,21 @@ PrivilegesRequired=admin
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Registry]
-; Add Tesseract to the system PATH so it is available to all applications.
-; NeedsAddPath() (defined in [Code] below) prevents duplicate entries.
+; Add Tesseract bin directory to PATH so tesseract.exe and its DLLs are
+; found by all applications. NeedsAddPath() prevents duplicate entries.
 Root: HKLM; \
   Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; \
   ValueType: expandsz; ValueName: "Path"; \
   ValueData: "{olddata};C:\Program Files\Tesseract-OCR"; \
   Check: NeedsAddPath('C:\Program Files\Tesseract-OCR')
+
+; TESSDATA_PREFIX tells Tesseract where to find language/model data when
+; it cannot determine the path from its own executable location (e.g. when
+; called from a frozen exe or a non-standard working directory).
+Root: HKLM; \
+  Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; \
+  ValueType: expandsz; ValueName: "TESSDATA_PREFIX"; \
+  ValueData: "C:\Program Files\Tesseract-OCR"
 
 [Files]
 ; Main executable (built with PyInstaller)
