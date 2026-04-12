@@ -32,4 +32,12 @@ THEMES = {
         "alpha":       0.70,
         "example":     "ℹ  Laranite (3x)  ·  Uncommon",
     },
+    "vargo": {
+        "bg_color":    "#1a1a2a",
+        "fg_color":    "#4fc3c3",
+        "font_family": "Consolas",
+        "font_size":   13,
+        "alpha":       0.90,
+        "example":     "ℹ  Quantainium (3x)  ·  Legendary",
+    },
 }
