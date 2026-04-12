@@ -36,8 +36,10 @@ C_MUTED   = "#304050"
 C_GREEN   = "#4fc97a"
 C_GREEN_D = "#1a3828"   # dim green for LED off-state
 C_RED     = "#c94f4f"
-C_SHINE   = "#b4dceb"   # glass top-edge shine
-C_REFLECT = "#a0c8dc"   # glass diagonal reflection
+C_SHINE   = "#1c2e3a"   # glass top-edge shine  (was #b4dceb @gray12 stipple)
+C_REFLECT = "#0d1a22"   # glass diagonal reflection (was #a0c8dc @gray6 stipple)
+C_SHADOW  = "#020208"   # inset shadow overlay     (was #000000 @gray25 stipple)
+C_SCAN    = "#1a4040"   # scan-line colour          (was #4fc3c3 @gray12 stipple)
 
 FONT = "Courier New"
 
@@ -295,7 +297,7 @@ class DisplayWindow:
         self._scan_y     = self._scan_min_y
         self._scan_id = g_cv.create_line(
             ix, iy + 1, ix + iw, iy + 1,
-            fill=C_CYAN, stipple="gray12", width=1)
+            fill=C_SCAN, width=1)
 
         # ── LED ──────────────────────────────────────────────────────
         led_cv = tk.Canvas(row, width=SLIM_LED_W, height=SLIM_H,
@@ -414,7 +416,7 @@ class DisplayWindow:
         self._scan_y     = self._scan_min_y
         self._scan_id = shell.create_line(
             gx, iy + 1, gx + INST_GLS_W, iy + 1,
-            fill=C_CYAN, stipple="gray12", width=1)
+            fill=C_SCAN, width=1)
 
         # Recent log
         rx = _REC_X
@@ -456,18 +458,18 @@ class DisplayWindow:
         cv.create_rectangle(ix, iy, ix + iw, iy + ih, fill=C_SURFACE, outline="")
         # Top-edge shine
         cv.create_line(ix + 2, iy, ix + iw - 2, iy,
-                       fill=C_SHINE, stipple="gray12", width=1)
+                       fill=C_SHINE, width=1)
         # Inset shadow – top edge
         cv.create_rectangle(ix, iy, ix + iw, iy + 3,
-                             fill="#000000", outline="", stipple="gray25")
+                             fill=C_SHADOW, outline="")
         # Inset shadow – left edge
         cv.create_rectangle(ix, iy, ix + 3, iy + ih,
-                             fill="#000000", outline="", stipple="gray25")
+                             fill=C_SHADOW, outline="")
         # Diagonal reflection (subtle, drawn before text so text reads through it)
         pts = [ix, iy,
                ix + int(iw * 0.55), iy,
                ix, iy + int(ih * 0.50)]
-        cv.create_polygon(pts, fill=C_REFLECT, stipple="gray6", outline="")
+        cv.create_polygon(pts, fill=C_REFLECT, outline="")
 
     def _draw_metal_panel(self, cv: tk.Canvas, x, y, w, h):
         """Dark metal panel with subtle alternating horizontal bands."""
@@ -584,7 +586,7 @@ class DisplayWindow:
         if not self._anim_active or self._scan_id is None:
             return
         try:
-            self._glass_canvas.itemconfig(self._scan_id, fill=C_CYAN)
+            self._glass_canvas.itemconfig(self._scan_id, fill=C_SCAN)
         except tk.TclError:
             pass
 
