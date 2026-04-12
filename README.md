@@ -163,7 +163,7 @@ python overlay.py
 
 ## Lookup table – lookup.json
 
-Contains 155 entries for 26 minerals × 6 multipliers.  
+Contains 163 entries for 26 minerals × 6 multipliers + Salvage.  
 Key = signature value as string, value = display text.
 
 ```json
@@ -184,23 +184,31 @@ Collisions (same signature value, different minerals) are joined with ` / `:
 | Script | Purpose |
 |---|---|
 | `test_ocr.py` | Saves `1_original.png` + `2_preprocessed.png` – shows what Tesseract actually sees |
-| `calibrate_hsv.py` | Click on a signature number → prints matching `hsv_low`/`hsv_high` values |
-| `test_lookup.py` | Tests lookup matches without a live game screenshot |
-| `debug_screenshots.py` | Analyses saved screenshots for detected regions |
+| `find_roi.py` | Helps locate and calibrate the scan region on screen |
+| `debug_script.py` | Analyses saved screenshots for detected regions |
+| `generate_theme_preview.py` | Renders `theme_preview.png` from `themes.py` |
 
 ---
 
 ## File structure
 
 ```
-sc-overlay/
-├── overlay.py              ← main program
-├── config.json             ← configuration
-├── lookup.json             ← 155 signature values
-├── test_ocr.py             ← test OCR and preprocessing
-├── calibrate_hsv.py        ← calibrate HSV colour range
-├── test_lookup.py          ← test lookup without the game
-├── debug_screenshots.py    ← analyse regions on screenshots
+sc_signature_reader/
+├── overlay.py                  ← main program, OCR pipeline, lookup logic
+├── themes.py                   ← overlay colour themes
+├── setup_wizard.py             ← first-run configuration wizard
+├── lookup.json                 ← 163 signature values
+├── config.example.json         ← config template (copy to config.json)
+├── SCSigReader.iss             ← Inno Setup installer script
+├── test_core.py                ← unit tests (81 tests)
+├── test_setup_wizard.py        ← wizard acceptance tests (20 tests)
+├── test_integration.py         ← integration tests (25 tests)
+├── test_ocr.py                 ← OCR debugging helper
+├── find_roi.py                 ← scan region calibration helper
+├── debug_script.py             ← screenshot region analysis
+├── generate_theme_preview.py   ← renders theme_preview.png
+├── LICENSE
+├── DISCLAIMER.md
 └── README.md
 ```
 
