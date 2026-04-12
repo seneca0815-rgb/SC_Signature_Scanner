@@ -138,6 +138,30 @@
       "note": "ScreenShot-2026-04-12_15-48-30-905.jpg  |  2560x1440  |  no detection",
       "expected_ocr": "",
       "expected_lookup": ""
+    },
+    {
+      "file": "capture_2026-04-12_17-59-57.png",
+      "note": "lossless mss capture  |  2560x1440  |  Tin (3x) signature 12585 as floating location-pin label – fallback psm7 path required",
+      "expected_ocr": "12585",
+      "expected_lookup": "Tin"
+    },
+    {
+      "file": "capture_2026-04-12_18-20-05.png",
+      "note": "lossless mss capture  |  2560x1440  |  Bexalite/Salvage signature 18000",
+      "expected_ocr": "18000",
+      "expected_lookup": "Bexalite"
+    },
+    {
+      "file": "capture_2026-04-12_18-20-19.png",
+      "note": "lossless mss capture  |  2560x1440  |  Salvage signature 2000 not detected – label colour falls outside HSV orange filter in this frame",
+      "expected_ocr": "",
+      "expected_lookup": ""
+    },
+    {
+      "file": "capture_2026-04-12_18-25-46.png",
+      "note": "lossless mss capture  |  2560x1440  |  Stileron (1x) signature 3185",
+      "expected_ocr": "3185",
+      "expected_lookup": "Stileron"
     }
   ]
 }
