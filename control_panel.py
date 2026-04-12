@@ -41,11 +41,12 @@ def _load_themes(base_dir: Path) -> dict:
 class ControlPanel:
 
     def __init__(self, root: tk.Tk, config: dict, state: AppState,
-                 overlay, base_dir: Path):
+                 overlay, display, base_dir: Path):
         self._root      = root
         self._config    = config
         self._state     = state
         self._overlay   = overlay
+        self._display   = display
         self._base_dir  = base_dir
         self._themes    = _load_themes(base_dir)
         self._minimised = False
@@ -54,7 +55,7 @@ class ControlPanel:
         self._win.title("Vargo Dynamics  ·  SC Signature Reader")
         self._win.configure(bg=C_BG)
         self._win.resizable(False, False)
-        self._win.geometry("340x520")
+        self._win.geometry("340x580")
         self._win.protocol("WM_DELETE_WINDOW", self._on_close)
 
         # Centre on screen
@@ -62,8 +63,8 @@ class ControlPanel:
         sw = self._win.winfo_screenwidth()
         sh = self._win.winfo_screenheight()
         x  = (sw - 340) // 2
-        y  = (sh - 520) // 2
-        self._win.geometry(f"340x520+{x}+{y}")
+        y  = (sh - 580) // 2
+        self._win.geometry(f"340x580+{x}+{y}")
 
         self._build_ui()
 
@@ -222,6 +223,29 @@ class ControlPanel:
 
         self._build_divider(w)
 
+        # ── Display mode ─────────────────────────────────────────────────
+        self._build_section(w, "DISPLAY")
+
+        display_row = tk.Frame(w, bg=C_BG)
+        display_row.pack(fill="x", padx=16, pady=(0, 4))
+
+        self._display_var = tk.StringVar(
+            value=self._config.get("display_mode", "sfr1_slim"))
+
+        for label, value in [("Slim", "sfr1_slim"),
+                              ("Instrument", "sfr1_instrument"),
+                              ("Off", "off")]:
+            tk.Radiobutton(
+                display_row, text=label, value=value,
+                variable=self._display_var,
+                bg=C_BG, fg=C_TEXT, selectcolor=C_SURFACE,
+                activebackground=C_BG, activeforeground=C_CYAN,
+                font=("Courier New", 10),
+                command=self._on_display_change,
+            ).pack(side="left", padx=(0, 8))
+
+        self._build_divider(w)
+
         # ── Buttons ──────────────────────────────────────────────────────
         btn_row = tk.Frame(w, bg=C_BG)
         btn_row.pack(fill="x", padx=16, pady=12)
@@ -271,6 +295,10 @@ class ControlPanel:
             self._state.set_theme(name)
             self._overlay.apply_theme(theme)
             self._refresh_theme_preview()
+
+    def _on_display_change(self):
+        mode = self._display_var.get()
+        self._display.set_mode(mode)
 
     def _on_close(self):
         """Minimise to tray instead of closing."""

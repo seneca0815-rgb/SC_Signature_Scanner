@@ -136,12 +136,20 @@ def main():
     root.withdraw()
     root.title("SC Signature Reader")
 
+    # Set config path so AppState can persist updates (position saves, etc.)
+    state.set_config_path(CONFIG_PATH)
+
     # --- Overlay window ---
     from overlay_window import OverlayWindow
     overlay = OverlayWindow(root, config, state)
 
+    # --- Display window ---
+    from display_window import DisplayWindow
+    config.setdefault("display_mode", "sfr1_slim")
+    display = DisplayWindow(root, config, state)
+
     # --- Control panel ---
-    panel = ControlPanel(root, config, state, overlay, BASE_DIR)
+    panel = ControlPanel(root, config, state, overlay, display, BASE_DIR)
 
     # --- Tray icon ---
     tray = TrayIcon(state, panel, BASE_DIR)

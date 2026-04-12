@@ -20,6 +20,11 @@
   "theme": "vargo",
   "hotkey": "scroll lock",
 
+  "display_mode": "sfr1_slim",
+  "_display_pos": "bottom-centre of a 2560x1440 screen; adjust for your resolution",
+  "display_x": 1030,
+  "display_y": 1380,
+
   "overlay_x": 30,
   "overlay_y": 30,
   "alpha": 0.90,
