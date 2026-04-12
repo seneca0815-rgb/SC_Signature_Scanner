@@ -1,10 +1,143 @@
 {
   "_readme": "Each entry describes one captured screenshot used for offline OCR regression tests.",
   "_fields": {
-    "file":             "PNG filename inside test_fixtures/",
-    "note":             "Human-readable description of what is visible in the screenshot",
-    "expected_ocr":     "Exact digit string the OCR should read (e.g. '12345'). Leave empty to skip OCR assertion.",
-    "expected_lookup":  "Substring that must appear in the lookup result (e.g. 'Quantainium'). Leave empty to skip lookup assertion."
+    "file": "PNG filename inside test_fixtures/",
+    "note": "Human-readable description of what is visible in the screenshot",
+    "expected_ocr": "Exact digit string the OCR should read (e.g. '12345'). Leave empty to skip OCR assertion.",
+    "expected_lookup": "Substring that must appear in the lookup result (e.g. 'Quantainium'). Leave empty to skip lookup assertion."
   },
-  "fixtures": []
+  "fixtures": [
+    {
+      "file": "ScreenShot-2026-04-11_16-48-11-0CD.png",
+      "note": "ScreenShot-2026-04-11_16-48-11-0CD.jpg  |  2560x1440  |  no detection",
+      "expected_ocr": "",
+      "expected_lookup": ""
+    },
+    {
+      "file": "ScreenShot-2026-04-11_16-48-19-222.png",
+      "note": "ScreenShot-2026-04-11_16-48-19-222.jpg  |  2560x1440  |  no detection",
+      "expected_ocr": "",
+      "expected_lookup": ""
+    },
+    {
+      "file": "ScreenShot-2026-04-11_16-49-00-199.png",
+      "note": "ScreenShot-2026-04-11_16-49-00-199.jpg  |  2560x1440",
+      "expected_ocr": "16840",
+      "expected_lookup": "Quartz"
+    },
+    {
+      "file": "ScreenShot-2026-04-11_16-50-44-665.png",
+      "note": "ScreenShot-2026-04-11_16-50-44-665.jpg  |  2560x1440  |  no detection",
+      "expected_ocr": "",
+      "expected_lookup": ""
+    },
+    {
+      "file": "ScreenShot-2026-04-11_16-50-49-B96.png",
+      "note": "ScreenShot-2026-04-11_16-50-49-B96.jpg  |  2560x1440  |  no detection",
+      "expected_ocr": "",
+      "expected_lookup": ""
+    },
+    {
+      "file": "ScreenShot-2026-04-11_16-51-04-6F2.png",
+      "note": "ScreenShot-2026-04-11_16-51-04-6F2.jpg  |  2560x1440  |  no detection",
+      "expected_ocr": "",
+      "expected_lookup": ""
+    },
+    {
+      "file": "ScreenShot-2026-04-11_16-51-19-F52.png",
+      "note": "ScreenShot-2026-04-11_16-51-19-F52.jpg  |  2560x1440",
+      "expected_ocr": "12000",
+      "expected_lookup": "Salvage"
+    },
+    {
+      "file": "ScreenShot-2026-04-12_15-34-04-37E.png",
+      "note": "ScreenShot-2026-04-12_15-34-04-37E.jpg  |  2560x1440",
+      "expected_ocr": "10155",
+      "expected_lookup": "Riccite"
+    },
+    {
+      "file": "ScreenShot-2026-04-12_15-34-06-8E4.png",
+      "note": "ScreenShot-2026-04-12_15-34-06-8E4.jpg  |  2560x1440  |  partial OCR read (1055 instead of 10155) – lookup still resolves via fuzzy match",
+      "expected_ocr": "",
+      "expected_lookup": "Riccite"
+    },
+    {
+      "file": "ScreenShot-2026-04-12_15-34-51-978.png",
+      "note": "ScreenShot-2026-04-12_15-34-51-978.jpg  |  2560x1440  |  no detection",
+      "expected_ocr": "",
+      "expected_lookup": ""
+    },
+    {
+      "file": "ScreenShot-2026-04-12_15-41-53-CA4.png",
+      "note": "ScreenShot-2026-04-12_15-41-53-CA4.jpg  |  2560x1440  |  no detection",
+      "expected_ocr": "",
+      "expected_lookup": ""
+    },
+    {
+      "file": "ScreenShot-2026-04-12_15-43-28-D7A.png",
+      "note": "ScreenShot-2026-04-12_15-43-28-D7A.jpg  |  2560x1440  |  no detection",
+      "expected_ocr": "",
+      "expected_lookup": ""
+    },
+    {
+      "file": "ScreenShot-2026-04-12_15-43-36-EA6.png",
+      "note": "ScreenShot-2026-04-12_15-43-36-EA6.jpg  |  2560x1440  |  no detection",
+      "expected_ocr": "",
+      "expected_lookup": ""
+    },
+    {
+      "file": "ScreenShot-2026-04-12_15-43-41-F34.png",
+      "note": "ScreenShot-2026-04-12_15-43-41-F34.jpg  |  2560x1440  |  no detection",
+      "expected_ocr": "",
+      "expected_lookup": ""
+    },
+    {
+      "file": "ScreenShot-2026-04-12_15-44-12-B26.png",
+      "note": "ScreenShot-2026-04-12_15-44-12-B26.jpg  |  2560x1440  |  no detection",
+      "expected_ocr": "",
+      "expected_lookup": ""
+    },
+    {
+      "file": "ScreenShot-2026-04-12_15-44-15-442.png",
+      "note": "ScreenShot-2026-04-12_15-44-15-442.jpg  |  2560x1440  |  no detection",
+      "expected_ocr": "",
+      "expected_lookup": ""
+    },
+    {
+      "file": "ScreenShot-2026-04-12_15-48-15-FCA.png",
+      "note": "ScreenShot-2026-04-12_15-48-15-FCA.jpg  |  2560x1440  |  noise detection (3-digit partial, no lookup match)",
+      "expected_ocr": "",
+      "expected_lookup": ""
+    },
+    {
+      "file": "ScreenShot-2026-04-12_15-48-18-AFF.png",
+      "note": "ScreenShot-2026-04-12_15-48-18-AFF.jpg  |  2560x1440  |  no detection",
+      "expected_ocr": "",
+      "expected_lookup": ""
+    },
+    {
+      "file": "ScreenShot-2026-04-12_15-48-20-3F4.png",
+      "note": "ScreenShot-2026-04-12_15-48-20-3F4.jpg  |  2560x1440  |  no detection",
+      "expected_ocr": "",
+      "expected_lookup": ""
+    },
+    {
+      "file": "ScreenShot-2026-04-12_15-48-23-C74.png",
+      "note": "ScreenShot-2026-04-12_15-48-23-C74.jpg  |  2560x1440  |  no detection",
+      "expected_ocr": "",
+      "expected_lookup": ""
+    },
+    {
+      "file": "ScreenShot-2026-04-12_15-48-25-7BB.png",
+      "note": "ScreenShot-2026-04-12_15-48-25-7BB.jpg  |  2560x1440  |  no detection",
+      "expected_ocr": "",
+      "expected_lookup": ""
+    },
+    {
+      "file": "ScreenShot-2026-04-12_15-48-30-905.png",
+      "note": "ScreenShot-2026-04-12_15-48-30-905.jpg  |  2560x1440  |  no detection",
+      "expected_ocr": "",
+      "expected_lookup": ""
+    }
+  ]
 }
