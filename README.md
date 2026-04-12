@@ -206,6 +206,16 @@ sc-overlay/
 
 ---
 
+## Disclaimer
+
+This is a fan-made community tool and is not affiliated with or endorsed by Cloud Imperium Games.
+It is designed to be ToS-compliant (screen capture only — no memory reading, no DLL injection).
+Use at your own risk.
+
+See [DISCLAIMER.md](DISCLAIMER.md) for the full disclaimer.
+
+---
+
 ## Troubleshooting
 
 **Overlay does not appear**  
