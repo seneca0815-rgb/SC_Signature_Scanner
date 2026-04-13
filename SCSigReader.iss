@@ -59,11 +59,11 @@ Source: "logger_setup.py";            DestDir: "{app}"; Flags: ignoreversion
 Source: "vargo_icon.ico";            DestDir: "{app}"; Flags: ignoreversion
 Source: "vargo_icon_256.png";        DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 
-; Sound files (optional – app falls back to beeps if absent)
-Source: "sounds\init.wav";        DestDir: "{app}\sounds"; Flags: ignoreversion skipifsourcenotexists
-Source: "sounds\activate.wav";    DestDir: "{app}\sounds"; Flags: ignoreversion skipifsourcenotexists
-Source: "sounds\deactivate.wav";  DestDir: "{app}\sounds"; Flags: ignoreversion skipifsourcenotexists
-Source: "sounds\signal.wav";      DestDir: "{app}\sounds"; Flags: ignoreversion skipifsourcenotexists
+; Sound files
+Source: "sounds\init.wav";        DestDir: "{app}\sounds"; Flags: ignoreversion
+Source: "sounds\activate.wav";    DestDir: "{app}\sounds"; Flags: ignoreversion
+Source: "sounds\deactivate.wav";  DestDir: "{app}\sounds"; Flags: ignoreversion
+Source: "sounds\signal.wav";      DestDir: "{app}\sounds"; Flags: ignoreversion
 
 ; Tesseract installer (bundled in redist\ folder)
 Source: "redist\tesseract-setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
