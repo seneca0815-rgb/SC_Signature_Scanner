@@ -26,9 +26,18 @@ sys.modules.setdefault("pytesseract", MagicMock())
 sys.modules.setdefault("cv2",         MagicMock())
 sys.modules.setdefault("numpy",       MagicMock())
 
-# tkinter needs a little more care – mock the whole package tree
-for _mod in ("tkinter", "tkinter.font"):
-    sys.modules.setdefault(_mod, MagicMock())
+# Import real tkinter BEFORE mocking it so we can restore the real modules
+# after overlay.py is imported.  Without this, every subsequent test file
+# that does `import tkinter` would get a MagicMock instead of the real
+# module, causing mysterious failures in test_ui_acceptance.py and others.
+import tkinter      as _real_tkinter
+import tkinter.ttk  as _real_tkinter_ttk
+import tkinter.font as _real_tkinter_font
+
+# Temporarily replace tkinter so overlay.py imports without a display server.
+sys.modules["tkinter"]      = MagicMock()
+sys.modules["tkinter.ttk"]  = MagicMock()
+sys.modules["tkinter.font"] = MagicMock()
 
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -85,6 +94,12 @@ def _load_fake(path):
 
 with patch("overlay.load_json", side_effect=_load_fake):
     import overlay as ov
+
+# Restore real tkinter so subsequent test files (test_ui_acceptance.py etc.)
+# get the real module when they do `import tkinter as tk`.
+sys.modules["tkinter"]      = _real_tkinter
+sys.modules["tkinter.ttk"]  = _real_tkinter_ttk
+sys.modules["tkinter.font"] = _real_tkinter_font
 
 
 # ---------------------------------------------------------------------------

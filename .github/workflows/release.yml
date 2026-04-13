@@ -86,6 +86,7 @@ jobs:
           --add-data "control_panel.py;."
           --add-data "tray_icon.py;."
           --add-data "logger_setup.py;."
+          --add-data "sounds;sounds"
           --icon "vargo_icon.ico"
           --name "SCSigReader"
 
@@ -96,6 +97,18 @@ jobs:
           Copy-Item -Path lookup.json          -Destination dist\lookup.json
           Copy-Item -Path themes.py            -Destination dist\themes.py
           Copy-Item -Path vargo_icon_256.png   -Destination dist\vargo_icon_256.png -ErrorAction SilentlyContinue
+
+      # ---------------------------------------------------------------
+      # Check for optional sound files (missing is non-fatal)
+      # ---------------------------------------------------------------
+      - name: Check sound files
+        shell: pwsh
+        run: |
+          if (Test-Path "sounds\init.wav") {
+            echo "Sound files found – will be included in installer"
+          } else {
+            echo "Warning: No WAV files in sounds\ – installer will use beep fallback"
+          }
 
       # ---------------------------------------------------------------
       # Build installer with Inno Setup

@@ -144,6 +144,15 @@ class TestSetupWizardSaveIntegration(unittest.TestCase):
         wiz._res_var    = type("V", (), {"get": lambda s: resolution_label})()
         wiz._theme_var  = type("V", (), {"get": lambda s: theme_name})()
         wiz._hotkey_var = type("V", (), {"get": lambda s: "Scroll Lock"})()
+        # Audio vars added when the audio step was introduced
+        _bool = lambda v: type("B", (), {"get": lambda s: v})()
+        _int  = lambda v: type("I", (), {"get": lambda s: v})()
+        wiz._audio_var          = _bool(True)
+        wiz._volume_var         = _int(50)
+        wiz._audio_init_var     = _bool(True)
+        wiz._audio_activate_var = _bool(True)
+        wiz._audio_deact_var    = _bool(True)
+        wiz._audio_signal_var   = _bool(False)
 
 
         with patch("setup_wizard.CONFIG_PATH", self.config_path), \

@@ -243,8 +243,8 @@ class TestWizardNavigation(unittest.TestCase):
     def test_step_count_matches_pages(self):
         from setup_wizard import SetupWizard
         wiz = self._make_wizard()
-        self.assertEqual(len(wiz.STEPS), 5,
-                         "Wizard must have exactly 5 steps")
+        self.assertEqual(len(wiz.STEPS), 6,
+                         "Wizard must have exactly 6 steps")
 
     def test_steps_have_corresponding_page_methods(self):
         from setup_wizard import SetupWizard

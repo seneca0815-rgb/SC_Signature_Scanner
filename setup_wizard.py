@@ -90,9 +90,9 @@ C_BTN_HOV  = "#3a4155"
 # ---------------------------------------------------------------------------
 
 class SetupWizard:
-    STEPS = ["welcome", "resolution", "theme", "hotkey", "finish"]
+    STEPS = ["welcome", "resolution", "theme", "audio", "hotkey", "finish"]
 
-    def __init__(self):
+    def __init__(self, audio_manager=None):
         self.root = tk.Tk()
         self.root.title("SC Signature Reader – Setup")
         self.root.geometry("620x520")
@@ -100,11 +100,21 @@ class SetupWizard:
         self.root.configure(bg=C_BG)
         self.root.eval("tk::PlaceWindow . center")
 
+        self._audio_manager = audio_manager
+
         self._step        = 0
         self._res_var     = tk.StringVar(value="2560 × 1440")
         self._theme_var   = tk.StringVar(value="vargo")
         self._hotkey_var  = tk.StringVar(value="Scroll Lock")
         self._preview_tk  = None   # keep reference so GC doesn't collect it
+
+        # Audio vars
+        self._audio_var          = tk.BooleanVar(value=True)
+        self._volume_var         = tk.IntVar(value=50)
+        self._audio_init_var     = tk.BooleanVar(value=True)
+        self._audio_activate_var = tk.BooleanVar(value=True)
+        self._audio_deact_var    = tk.BooleanVar(value=True)
+        self._audio_signal_var   = tk.BooleanVar(value=False)
 
         self._build_header()
         self._frame = tk.Frame(self.root, bg=C_BG)
@@ -325,6 +335,116 @@ class SetupWizard:
                             font=tkfont.Font(family="Consolas", size=9),
                             anchor="e")
 
+    def _page_audio(self):
+        f = self._frame
+        tk.Label(f, text="AUDIO SETTINGS", bg=C_BG, fg=C_TEXT,
+                 font=("Consolas", 15, "bold")).pack(anchor="w", pady=(18, 4))
+        tk.Label(f,
+                 text="Configure scanner audio feedback.",
+                 bg=C_BG, fg=C_MUTED,
+                 font=("Consolas", 11)).pack(anchor="w", pady=(0, 14))
+
+        # Row 1 – Master switch
+        row1 = tk.Frame(f, bg=C_BG)
+        row1.pack(fill="x", pady=3)
+        tk.Checkbutton(
+            row1, text="Enable audio output",
+            variable=self._audio_var,
+            bg=C_BG, fg=C_TEXT,
+            selectcolor=C_SURFACE,
+            activebackground=C_BG, activeforeground=C_ACCENT,
+            font=("Consolas", 12),
+        ).pack(anchor="w")
+
+        # Row 2 – Volume
+        row2 = tk.Frame(f, bg=C_BG)
+        row2.pack(fill="x", pady=(6, 2))
+        tk.Label(row2, text="Volume", bg=C_BG, fg=C_TEXT,
+                 font=("Consolas", 11), width=22, anchor="w").pack(side="left")
+        tk.Scale(
+            row2,
+            variable=self._volume_var,
+            from_=0, to=100,
+            orient="horizontal",
+            label=None,
+            bg=C_BG, fg=C_TEXT,
+            troughcolor=C_SURFACE, highlightthickness=0,
+            activebackground=C_ACCENT,
+            font=("Consolas", 9),
+            length=200,
+        ).pack(side="left")
+        tk.Label(row2, text="%", bg=C_BG, fg=C_MUTED,
+                 font=("Consolas", 10)).pack(side="left", padx=(4, 0))
+
+        tk.Label(f,
+                 text="Use the Windows volume mixer to adjust playback level.",
+                 bg=C_BG, fg=C_MUTED,
+                 font=("Consolas", 9), justify="left").pack(
+                     anchor="w", pady=(0, 6))
+
+        # Row 3 – Individual sound toggles
+        checks = [
+            ("Startup announcement",  self._audio_init_var),
+            ("Scanner activated",     self._audio_activate_var),
+            ("Scanner deactivated",   self._audio_deact_var),
+            ("Signal detected",       self._audio_signal_var),
+        ]
+        for label, var in checks:
+            row = tk.Frame(f, bg=C_BG)
+            row.pack(fill="x", pady=1)
+            tk.Checkbutton(
+                row, text=label,
+                variable=var,
+                bg=C_BG, fg=C_TEXT,
+                selectcolor=C_SURFACE,
+                activebackground=C_BG, activeforeground=C_ACCENT,
+                font=("Consolas", 11),
+            ).pack(anchor="w", padx=(16, 0))
+
+        # Row 4 – Test button
+        row4 = tk.Frame(f, bg=C_BG)
+        row4.pack(fill="x", pady=(12, 0))
+        self._test_msg_lbl = tk.Label(row4, text="", bg=C_BG, fg=C_MUTED,
+                                       font=("Consolas", 10))
+        self._test_msg_lbl.pack(side="right", padx=(8, 0))
+        tk.Button(
+            row4, text="TEST AUDIO",
+            bg=C_BTN_BG, fg=C_ACCENT,
+            activebackground=C_BTN_HOV, activeforeground=C_ACCENT,
+            font=("Consolas", 11, "bold"), relief="flat",
+            padx=14, pady=5,
+            command=self._on_test_audio,
+        ).pack(side="left")
+
+    def _on_test_audio(self):
+        # Check if WAV files are present and inform the user
+        sounds_dir = BASE_DIR / "sounds"
+        has_wavs   = sounds_dir.is_dir() and any(sounds_dir.glob("*.wav"))
+
+        if not has_wavs and hasattr(self, "_test_msg_lbl"):
+            self._test_msg_lbl.config(
+                text="No WAV files found in sounds\\ – using beep fallback")
+            self.root.after(
+                3000, lambda: self._test_msg_lbl.config(text=""))
+
+        # Play audio regardless; AudioManager falls back to beep when no WAVs
+        if self._audio_manager is not None:
+            self._audio_manager.test_audio()
+        else:
+            try:
+                from audio_manager import AudioManager
+                cfg = {
+                    "audio_enabled": True,
+                    "audio_volume": self._volume_var.get() / 100.0,
+                    "audio_voice_init": self._audio_init_var.get(),
+                    "audio_sound_activate": self._audio_activate_var.get(),
+                    "audio_sound_deactivate": self._audio_deact_var.get(),
+                    "audio_sound_signal": self._audio_signal_var.get(),
+                }
+                AudioManager(cfg).test_audio()
+            except Exception:
+                pass
+
     def _page_hotkey(self):
         f = self._frame
         tk.Label(f, text="Scanner hotkey", bg=C_BG, fg=C_TEXT,
@@ -367,11 +487,13 @@ class SetupWizard:
         res    = self._res_var.get()
         theme  = self._theme_var.get()
         hotkey = self._hotkey_var.get()
+        audio  = "ON" if self._audio_var.get() else "OFF"
 
         summary = (
             f"Resolution : {res}\n"
             f"Theme      : {theme}\n"
-            f"Hotkey     : {hotkey}\n\n"
+            f"Hotkey     : {hotkey}\n"
+            f"Audio      : {audio}\n\n"
             "Click Finish to save your settings\n"
             "and launch SC Signature Reader."
         )
@@ -410,6 +532,13 @@ class SetupWizard:
         # Hotkey
         hotkey_label = self._hotkey_var.get()
         cfg["hotkey"] = HOTKEYS.get(hotkey_label, "scroll lock")
+        # Audio
+        cfg["audio_enabled"]          = bool(self._audio_var.get())
+        cfg["audio_volume"]           = round(self._volume_var.get() / 100.0, 2)
+        cfg["audio_voice_init"]       = bool(self._audio_init_var.get())
+        cfg["audio_sound_activate"]   = bool(self._audio_activate_var.get())
+        cfg["audio_sound_deactivate"] = bool(self._audio_deact_var.get())
+        cfg["audio_sound_signal"]     = bool(self._audio_signal_var.get())
 
         res    = self._res_var.get()
         theme  = self._theme_var.get()
