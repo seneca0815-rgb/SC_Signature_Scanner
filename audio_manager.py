@@ -155,7 +155,7 @@ class AudioManager:
                 _winsound.SND_FILENAME | _winsound.SND_ASYNC,
             )
         else:
-            log.warning("Sound file not found: %s – using fallback beep", name)
+            log.warning("Sound file not found: %s - using fallback beep", name)
             _winsound.Beep(1000, 100)
 
     def _do_test_sequence(self):
