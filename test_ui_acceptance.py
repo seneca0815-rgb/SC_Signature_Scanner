@@ -218,6 +218,17 @@ class TestAppState(unittest.TestCase):
         self.assertIn("a", fired)
         self.assertIn("b", fired)
 
+    def test_concurrent_set_signal_does_not_corrupt_recent(self):
+        import threading
+        threads = [
+            threading.Thread(target=self.state.set_signal, args=(f"Signal {i}",))
+            for i in range(20)
+        ]
+        for t in threads: t.start()
+        for t in threads: t.join()
+        self.assertLessEqual(len(self.state.recent_signals), 5)
+        self.assertTrue(self.state.running)
+
     def test_callback_exception_does_not_crash_state(self):
         self.state.register_callback(lambda: 1 / 0)
         # Must not raise
