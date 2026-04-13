@@ -4,12 +4,16 @@ Main control window. Always visible on startup.
 Minimises to tray on close – does NOT exit the app.
 """
 
+import subprocess
 import tkinter as tk
 from tkinter import ttk
 from pathlib import Path
 import importlib.util
 
 from app_state import AppState
+from logger_setup import get_logger
+
+log = get_logger()
 
 # ---------------------------------------------------------------------------
 # Brand colours
@@ -41,12 +45,13 @@ def _load_themes(base_dir: Path) -> dict:
 class ControlPanel:
 
     def __init__(self, root: tk.Tk, config: dict, state: AppState,
-                 overlay, base_dir: Path):
+                 overlay, base_dir: Path, log_dir: Path = None):
         self._root      = root
         self._config    = config
         self._state     = state
         self._overlay   = overlay
         self._base_dir  = base_dir
+        self._log_dir   = log_dir
         self._themes    = _load_themes(base_dir)
         self._minimised = False
 
@@ -69,6 +74,7 @@ class ControlPanel:
 
         # Register for state changes
         state.register_callback(self._on_state_change)
+        log.info("Control panel initialised")
 
     # ------------------------------------------------------------------
     # Build UI
@@ -233,6 +239,13 @@ class ControlPanel:
                   padx=10, pady=6,
                   command=self._on_close).pack(side="left")
 
+        tk.Button(btn_row, text="LOG",
+                  bg=C_SURFACE, fg=C_MUTED,
+                  activebackground=C_BORDER, activeforeground=C_TEXT,
+                  font=("Courier New", 10), relief="flat",
+                  padx=10, pady=6,
+                  command=self._on_open_log).pack(side="left", padx=(8, 0))
+
         tk.Button(btn_row, text="EXIT",
                   bg=C_SURFACE, fg=C_RED,
                   activebackground=C_BORDER, activeforeground=C_RED,
@@ -268,6 +281,7 @@ class ControlPanel:
         name  = self._theme_var.get()
         theme = self._themes.get(name)
         if theme:
+            log.info("Theme changed via control panel: %s", name)
             self._state.set_theme(name)
             self._overlay.apply_theme(theme)
             self._refresh_theme_preview()
@@ -277,7 +291,16 @@ class ControlPanel:
         self._win.withdraw()
         self._minimised = True
 
+    def _on_open_log(self):
+        if self._log_dir and self._log_dir.is_dir():
+            subprocess.Popen(f'explorer "{self._log_dir}"')
+        elif self._log_dir:
+            # Dir doesn't exist yet (no log written) – open parent
+            self._log_dir.mkdir(parents=True, exist_ok=True)
+            subprocess.Popen(f'explorer "{self._log_dir}"')
+
     def _on_exit(self):
+        log.info("Exit requested via control panel")
         self._state.running = False
         self._root.quit()
 

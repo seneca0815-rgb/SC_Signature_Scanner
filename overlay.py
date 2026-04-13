@@ -20,6 +20,10 @@ import numpy as np
 import pytesseract
 from PIL import Image, ImageOps, ImageFilter
 
+from logger_setup import get_logger
+
+log = get_logger()
+
 # ---------------------------------------------------------------------------
 # Base directory – works both as plain Python and PyInstaller frozen exe
 # ---------------------------------------------------------------------------
@@ -60,11 +64,15 @@ _HSV_HIGH = np.array([30, 255, 255], dtype=np.uint8)
 _MIN_AREA = 200
 _PADDING  = 6
 
+_empty_scan_count: int = 0   # consecutive empty-OCR counter
+
 
 def init(config_path: Path, lookup_path: Path) -> None:
     """Load config and lookup, apply theme, initialise all module globals."""
     global config, lookup, ROI, INTERVAL, CONFIDENCE, FUZZY_MAX_DIST
     global _HSV_LOW, _HSV_HIGH, _MIN_AREA, _PADDING
+
+    log.debug("overlay.init() called with config path: %s", config_path)
 
     config = load_json(config_path)
     lookup = load_json(lookup_path)
@@ -327,9 +335,22 @@ def scan_once() -> list[tuple[str, str]]:
             if not (MIN_DIGITS <= len(candidate) <= MAX_DIGITS + 1):
                 continue
             result = lookup_text(candidate)
-            print(f"[OCR] '{candidate}'  →  {result}")
+            log.debug("OCR raw='%s' -> %s", candidate, result)
             if result:
                 hits.append((candidate, result))
+
+    log.debug("Regions found: %d", len(regions))
+
+    global _empty_scan_count
+    if hits:
+        _empty_scan_count = 0
+    else:
+        _empty_scan_count += 1
+        if _empty_scan_count == 10:
+            log.warning(
+                "OCR returned empty result 10 times in a row - "
+                "check scan_region and HSV settings"
+            )
 
     return hits
 
@@ -362,7 +383,7 @@ def scan_loop(overlay: "OverlayWindow"):
                         overlay.hide()
 
         except Exception as exc:
-            print(f"[scan_loop] Fehler: {exc}")
+            log.error("scan_loop error: %s", exc)
 
         time.sleep(INTERVAL)
 

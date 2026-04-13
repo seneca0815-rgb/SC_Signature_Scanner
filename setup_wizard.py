@@ -13,6 +13,10 @@ from tkinter import font as tkfont
 
 from PIL import Image, ImageTk
 
+from logger_setup import get_logger
+
+log = get_logger()
+
 # ---------------------------------------------------------------------------
 # Base directory – works both as plain Python and PyInstaller frozen exe
 # ---------------------------------------------------------------------------
@@ -407,14 +411,25 @@ class SetupWizard:
         hotkey_label = self._hotkey_var.get()
         cfg["hotkey"] = HOTKEYS.get(hotkey_label, "scroll lock")
 
+        res    = self._res_var.get()
+        theme  = self._theme_var.get()
+        hotkey = HOTKEYS.get(self._hotkey_var.get(), "scroll lock")
+        log.info(
+            "Wizard complete - resolution=%s theme=%s hotkey=%s",
+            res, theme, hotkey,
+        )
+
         # Write back
         with open(CONFIG_PATH, "w", encoding="utf-8") as fh:
             json.dump(cfg, fh, indent=2, ensure_ascii=False)
 
+        log.info("Config written by wizard: %s", CONFIG_PATH)
+
         self.root.destroy()
-        sys.exit(0)      # ← Prozess explizit beenden
+        sys.exit(0)      # <- Prozess explizit beenden
         
     def run(self):
+        log.info("Setup wizard started")
         self.root.mainloop()
 
 

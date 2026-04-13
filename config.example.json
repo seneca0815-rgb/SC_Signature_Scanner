@@ -20,6 +20,9 @@
   "theme": "vargo",
   "hotkey": "scroll lock",
 
+  "_logging": "Log level: DEBUG, INFO, WARNING, ERROR",
+  "log_level": "INFO",
+
   "overlay_x": 30,
   "overlay_y": 30,
   "alpha": 0.90,

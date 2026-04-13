@@ -9,6 +9,10 @@ from collections import deque
 from pathlib import Path
 import json
 
+from logger_setup import get_logger
+
+log = get_logger()
+
 
 MAX_RECENT = 5
 
@@ -51,6 +55,7 @@ class AppState:
     def toggle_pause(self):
         with self._lock:
             self._paused = not self._paused
+        log.info("Scanner %s", "paused" if self._paused else "resumed")
         self._notify()
 
     def set_paused(self, value: bool):
@@ -76,6 +81,7 @@ class AppState:
             self._last_signal = text
             if text:
                 self._recent.append(text)
+        log.debug("Signal set: '%s'", text)
         self._notify()
 
     # ------------------------------------------------------------------
@@ -90,6 +96,7 @@ class AppState:
         with self._lock:
             self._active_theme = name
             self._config["theme"] = name
+        log.info("Theme changed to: %s", name)
         self._save_config()
         self._notify()
 
@@ -106,7 +113,7 @@ class AppState:
                 with open(self._config_path, "w", encoding="utf-8") as f:
                     json.dump(self._config, f, indent=2, ensure_ascii=False)
             except Exception as e:
-                print(f"[AppState] Failed to save config: {e}")
+                log.warning("Config save failed: %s", e)
 
     # ------------------------------------------------------------------
     # Change notification
@@ -121,4 +128,4 @@ class AppState:
             try:
                 fn()
             except Exception as e:
-                print(f"[AppState] Callback error: {e}")
+                log.warning("AppState callback error: %s", e)

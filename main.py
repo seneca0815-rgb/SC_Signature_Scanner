@@ -1,5 +1,5 @@
 """
-main.py  –  SC Signature Reader / Vargo Dynamics
+main.py  -  SC Signature Reader / Vargo Dynamics
 Central entry point. Creates shared AppState, starts all threads,
 opens the control panel and runs the tkinter mainloop.
 
@@ -18,7 +18,13 @@ import tkinter as tk
 
 from app_state import AppState
 from control_panel import ControlPanel
+from logger_setup import get_logger, setup_logger
 from tray_icon import TrayIcon
+
+VERSION = "1.0"
+
+# Module-level logger – handlers are added by setup_logger() in main()
+log = get_logger()
 
 
 # ---------------------------------------------------------------------------
@@ -26,7 +32,6 @@ from tray_icon import TrayIcon
 # ---------------------------------------------------------------------------
 
 def get_base_dir() -> Path:
-    import sys
     if getattr(sys, "frozen", False):
         return Path(sys.executable).parent
     return Path(__file__).parent
@@ -69,7 +74,7 @@ def _build_scan_loop(state: AppState):
                     state.set_signal(result)
 
             except Exception as exc:
-                print(f"[scan_loop] {exc}")
+                log.error("Scan loop error: %s", exc)
 
             time.sleep(state.interval)
 
@@ -84,20 +89,20 @@ def _start_hotkey_listener(state: AppState, config: dict):
     try:
         import keyboard
     except ImportError:
-        print("[hotkey] 'keyboard' not installed – hotkey disabled")
+        log.warning("'keyboard' package not installed - hotkey disabled")
         return
 
     hotkey = config.get("hotkey", "F9")
 
     def on_hotkey():
         state.toggle_pause()
-        print(f"[hotkey] Scanner {'paused' if state.paused else 'active'}")
+        log.debug("Hotkey pressed - scanner %s", "paused" if state.paused else "active")
 
     try:
         keyboard.add_hotkey(hotkey, on_hotkey)
-        print(f"[hotkey] {hotkey} registered")
+        log.info("Hotkey registered: %s", hotkey)
     except Exception as e:
-        print(f"[hotkey] Failed to register {hotkey}: {e}")
+        log.warning("Failed to register hotkey '%s': %s", hotkey, e)
 
 
 # ---------------------------------------------------------------------------
@@ -105,24 +110,62 @@ def _start_hotkey_listener(state: AppState, config: dict):
 # ---------------------------------------------------------------------------
 
 def main():
+    try:
+        _run()
+    except Exception:
+        log.exception("Unhandled exception in main - application will exit")
+        raise
+
+
+def _run():
     # --- Setup wizard ---
     if "--setup" in sys.argv:
         from setup_wizard import SetupWizard
         SetupWizard().run()
 
-    # --- Load config and lookup ---
+    # --- Load config ---
     try:
         config = load_json(CONFIG_PATH)
     except FileNotFoundError:
+        # Logger not yet configured – use print as last resort
         print(f"[main] config.json not found at {CONFIG_PATH}")
         print("[main] Run with --setup to configure, or copy config.example.json")
         sys.exit(1)
 
+    # --- Logging ---
+    _log, log_path = setup_logger(config)
+    log_dir = log_path.parent
+
+    log.info("SC Signature Reader v%s starting", VERSION)
+    log.info("Base directory: %s", BASE_DIR)
+    log.info("Config loaded: %s", CONFIG_PATH)
+    log.info("Log file: %s", log_path)
+
+    # --- Tesseract validation ---
+    try:
+        import pytesseract
+        pytesseract.pytesseract.tesseract_cmd = config.get(
+            "tesseract_cmd", "tesseract")
+        tess_ver = pytesseract.get_tesseract_version()
+        log.info("Tesseract version: %s", tess_ver)
+    except FileNotFoundError:
+        log.error(
+            "Tesseract not found at '%s'. "
+            "OCR will not work. "
+            "Download from https://github.com/UB-Mannheim/tesseract/wiki",
+            config.get("tesseract_cmd"),
+        )
+    except Exception as e:
+        log.warning("Tesseract check failed: %s", e)
+
+    # --- Load lookup table ---
     try:
         lookup = load_json(LOOKUP_PATH)
     except FileNotFoundError:
-        print(f"[main] lookup.json not found at {LOOKUP_PATH}")
+        log.error("lookup.json not found at %s", LOOKUP_PATH)
         sys.exit(1)
+
+    log.info("Lookup table loaded: %d entries", len(lookup))
 
     # Initialise overlay module (loads config+lookup, applies theme, sets globals)
     import overlay as ov
@@ -130,8 +173,9 @@ def main():
 
     # --- Shared state ---
     state = AppState(config)
+    state.set_config_path(CONFIG_PATH)
 
-    # --- Tkinter root (hidden – ControlPanel and Overlay are Toplevels) ---
+    # --- Tkinter root (hidden - ControlPanel and Overlay are Toplevels) ---
     root = tk.Tk()
     root.withdraw()
     root.title("SC Signature Reader")
@@ -141,7 +185,13 @@ def main():
     overlay = OverlayWindow(root, config, state)
 
     # --- Control panel ---
-    panel = ControlPanel(root, config, state, overlay, BASE_DIR)
+    panel = ControlPanel(root, config, state, overlay, BASE_DIR, log_dir)
+
+    log.info("Theme: %s", config.get("theme"))
+    log.info("Scan region: %s", config.get("scan_region") or config.get("roi"))
+    log.info("Audio enabled: %s", config.get("audio_enabled", False))
+    log.info("Hotkey: %s", config.get("hotkey", "Scroll Lock"))
+    log.info("Control panel ready")
 
     # --- Tray icon ---
     tray = TrayIcon(state, panel, BASE_DIR)
@@ -157,12 +207,13 @@ def main():
     _start_hotkey_listener(state, config)
 
     # --- Mainloop ---
-    print("SC Signature Reader started.")
+    log.info("SC Signature Reader started")
     try:
         root.mainloop()
     finally:
         state.running = False
         tray.stop()
+        log.info("SC Signature Reader shutdown cleanly")
 
 
 if __name__ == "__main__":
