@@ -150,9 +150,18 @@ def _run():
 
     # --- Tesseract validation ---
     try:
+        import os
         import pytesseract
-        pytesseract.pytesseract.tesseract_cmd = config.get(
-            "tesseract_cmd", "tesseract")
+        tesseract_cmd = config.get("tesseract_cmd", "tesseract")
+        pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
+        # Derive TESSDATA_PREFIX from tesseract_cmd when not already set.
+        # Tesseract 5.x requires TESSDATA_PREFIX to point at the tessdata/
+        # subdirectory (not the Tesseract-OCR install root).
+        if tesseract_cmd and tesseract_cmd != "tesseract":
+            tessdata_dir = Path(tesseract_cmd).parent / "tessdata"
+            if tessdata_dir.is_dir():
+                os.environ.setdefault("TESSDATA_PREFIX", str(tessdata_dir))
+                log.debug("TESSDATA_PREFIX set to: %s", os.environ["TESSDATA_PREFIX"])
         tess_ver = pytesseract.get_tesseract_version()
         log.info("Tesseract version: %s", tess_ver)
     except FileNotFoundError:

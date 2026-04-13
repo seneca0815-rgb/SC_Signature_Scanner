@@ -39,10 +39,12 @@ Root: HKLM; \
 ; TESSDATA_PREFIX tells Tesseract where to find language/model data when
 ; it cannot determine the path from its own executable location (e.g. when
 ; called from a frozen exe or a non-standard working directory).
+; Tesseract 5.x requires this to point at the tessdata/ subfolder, not the
+; Tesseract-OCR install root.
 Root: HKLM; \
   Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; \
   ValueType: expandsz; ValueName: "TESSDATA_PREFIX"; \
-  ValueData: "C:\Program Files\Tesseract-OCR"
+  ValueData: "C:\Program Files\Tesseract-OCR\tessdata"
 
 [Files]
 ; Main executable (built with PyInstaller)
