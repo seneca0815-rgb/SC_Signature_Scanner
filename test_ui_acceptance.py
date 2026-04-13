@@ -3,12 +3,15 @@ test_ui_acceptance.py  –  SC Signature Reader / Vargo Dynamics
 UI Acceptance Tests.
 
 Tests cover:
-  • AppState      — signal, pause, theme, callbacks (no GUI needed)
-  • OverlayWindow — show/hide, state-driven sync, theme application
-  • ControlPanel  — toggle, signal display, recent list, theme preview,
-                    minimise-to-tray, exit
-  • SetupWizard   — step navigation, button states, widget presence,
-                    default values
+  • AppState       — signal, pause, theme, callbacks (no GUI needed)
+  • OverlayWindow  — show/hide, state-driven sync, theme application
+  • ControlPanel   — toggle, signal display, recent list, theme preview,
+                     minimise-to-tray, exit
+  • _parse_signal  — pure helper, no GUI
+  • DisplayWindow  — slim/instrument structure, canvas items, state-driven
+                     refresh, set_mode switching
+  • SetupWizard    — step navigation, button states, widget presence,
+                     default values
 
 Implementation notes:
   - No mainloop() calls: windows are driven programmatically.
@@ -46,6 +49,7 @@ if not _cfg.exists():
 from app_state import AppState
 from overlay_window import OverlayWindow
 from control_panel import ControlPanel
+from display_window import DisplayWindow, _parse_signal, MAT_ROWS, MAT_COLS
 from setup_wizard import SetupWizard, THEMES, RESOLUTIONS
 from themes import THEMES as THEMES_DICT
 
@@ -384,9 +388,12 @@ class TestControlPanel(unittest.TestCase):
         # OverlayWindow stub — only apply_theme is called by ControlPanel
         self.fake_overlay = type("FakeOverlay", (), {
             "apply_theme": lambda self, t: None})()
+        # DisplayWindow stub — only set_mode is called by ControlPanel
+        self.fake_display = type("FakeDisplay", (), {
+            "set_mode": lambda self, m: None})()
         self.panel = ControlPanel(
             self.root, self.config, self.state,
-            self.fake_overlay, PROJECT_ROOT)
+            self.fake_overlay, self.fake_display, PROJECT_ROOT)
         _pump(self.root)
 
     def tearDown(self):
@@ -532,7 +539,242 @@ class TestControlPanel(unittest.TestCase):
 
 
 # ===========================================================================
-# 4. SetupWizard UI
+# 4. DisplayWindow
+# ===========================================================================
+
+class TestParseSignal(unittest.TestCase):
+    """_parse_signal() helper — pure function, no GUI needed."""
+
+    def test_empty_string_returns_none(self):
+        self.assertIsNone(_parse_signal(""))
+
+    def test_none_returns_none(self):
+        self.assertIsNone(_parse_signal(None))
+
+    def test_full_format_extracts_all_parts(self):
+        result = _parse_signal("Quantainium (3x) · Common")
+        self.assertEqual(result, ("Quantainium", "(3x)", "Common"))
+
+    def test_no_rarity_separator_fallback(self):
+        mineral, mult, rarity = _parse_signal("Quantainium (3x)")
+        self.assertIn("Quantainium", mineral)
+        self.assertEqual(mult, "")
+        self.assertEqual(rarity, "")
+
+    def test_fuzzy_prefix_stripped(self):
+        result = _parse_signal("~ Quantainium (3x) · Common")
+        self.assertIsNotNone(result)
+        self.assertEqual(result[0], "Quantainium")
+
+    def test_collision_slash_takes_first_entry(self):
+        result = _parse_signal("Quantainium (3x) · Common / Bexalite (2x) · Rare")
+        self.assertIsNotNone(result)
+        self.assertEqual(result[0], "Quantainium")
+
+    def test_plain_name_no_match_returns_as_mineral(self):
+        mineral, mult, rarity = _parse_signal("Unknown")
+        self.assertEqual(mineral, "Unknown")
+        self.assertEqual(mult, "")
+        self.assertEqual(rarity, "")
+
+
+class TestDisplayWindow(unittest.TestCase):
+    """VD-SFR1 display: mode switching, canvas items, state-driven refresh."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.root = tk.Tk()
+        cls.root.withdraw()
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.root.destroy()
+        except Exception:
+            pass
+
+    def setUp(self):
+        cfg = _make_config()
+        cfg.update({"display_mode": "sfr1_slim", "display_x": 0, "display_y": 0})
+        self.config  = cfg
+        self.state   = AppState(cfg)
+        self.display = DisplayWindow(self.root, cfg, self.state)
+        _pump(self.root)
+
+    def tearDown(self):
+        self.display._stop_animations()
+        try:
+            _pump(self.root)
+        except Exception:
+            pass
+        try:
+            self.display._win.destroy()
+        except Exception:
+            pass
+
+    # ── slim – initial structure ──────────────────────────────────────────
+
+    def test_slim_visible_on_init(self):
+        self.assertTrue(_is_mapped(self.display._win))
+
+    def test_slim_mode_attribute(self):
+        self.assertEqual(self.display._mode, "sfr1_slim")
+
+    def test_slim_glass_canvas_populated(self):
+        self.assertIsNotNone(self.display._glass_canvas)
+
+    def test_slim_led_canvas_populated(self):
+        self.assertIsNotNone(self.display._led_canvas)
+
+    def test_slim_scan_item_created(self):
+        self.assertIsNotNone(self.display._scan_id)
+
+    def test_slim_led_item_created(self):
+        self.assertIsNotNone(self.display._led_id)
+
+    def test_slim_mineral_shows_no_signal_on_init(self):
+        cv   = self.display._glass_canvas
+        text = cv.itemcget(self.display._slim_mineral, "text")
+        self.assertEqual(text, "NO SIGNAL")
+
+    def test_slim_mult_empty_on_init(self):
+        cv   = self.display._glass_canvas
+        text = cv.itemcget(self.display._slim_mult, "text")
+        self.assertEqual(text, "")
+
+    # ── slim – signal display ─────────────────────────────────────────────
+
+    def test_slim_signal_updates_mineral_name(self):
+        self.state.set_signal("Quantainium (3x) · Common")
+        _pump(self.root)
+        cv   = self.display._glass_canvas
+        text = cv.itemcget(self.display._slim_mineral, "text")
+        self.assertIn("Quantainium", text)
+
+    def test_slim_signal_updates_multiplier(self):
+        self.state.set_signal("Quantainium (3x) · Common")
+        _pump(self.root)
+        cv   = self.display._glass_canvas
+        text = cv.itemcget(self.display._slim_mult, "text")
+        self.assertEqual(text, "(3x)")
+
+    def test_slim_signal_updates_rarity(self):
+        self.state.set_signal("Quantainium (3x) · Common")
+        _pump(self.root)
+        cv   = self.display._glass_canvas
+        text = cv.itemcget(self.display._slim_rarity, "text")
+        self.assertIn("Common", text)
+
+    def test_slim_clear_resets_mineral_to_no_signal(self):
+        self.state.set_signal("Quantainium (3x) · Common")
+        _pump(self.root)
+        self.state.set_signal("")
+        _pump(self.root)
+        cv   = self.display._glass_canvas
+        text = cv.itemcget(self.display._slim_mineral, "text")
+        self.assertEqual(text, "NO SIGNAL")
+
+    def test_slim_clear_empties_multiplier(self):
+        self.state.set_signal("Quantainium (3x) · Common")
+        _pump(self.root)
+        self.state.set_signal("")
+        _pump(self.root)
+        cv   = self.display._glass_canvas
+        text = cv.itemcget(self.display._slim_mult, "text")
+        self.assertEqual(text, "")
+
+    # ── instrument – structure ────────────────────────────────────────────
+
+    def test_instrument_visible_after_set_mode(self):
+        self.display.set_mode("sfr1_instrument")
+        _pump(self.root)
+        self.assertTrue(_is_mapped(self.display._win))
+
+    def test_instrument_mode_attribute(self):
+        self.display.set_mode("sfr1_instrument")
+        _pump(self.root)
+        self.assertEqual(self.display._mode, "sfr1_instrument")
+
+    def test_instrument_canvas_ref_populated(self):
+        self.display.set_mode("sfr1_instrument")
+        _pump(self.root)
+        self.assertIsNotNone(self.display._inst_canvas)
+
+    def test_instrument_matrix_dot_count(self):
+        self.display.set_mode("sfr1_instrument")
+        _pump(self.root)
+        self.assertEqual(len(self.display._matrix_items), MAT_ROWS * MAT_COLS)
+
+    def test_instrument_recent_text_slots(self):
+        self.display.set_mode("sfr1_instrument")
+        _pump(self.root)
+        self.assertEqual(len(self.display._recent_texts), 4)
+
+    def test_instrument_mineral_shows_no_signal_on_init(self):
+        self.display.set_mode("sfr1_instrument")
+        _pump(self.root)
+        cv   = self.display._inst_canvas
+        text = cv.itemcget(self.display._inst_mineral, "text")
+        self.assertEqual(text, "NO SIGNAL")
+
+    def test_instrument_signal_updates_mineral_name(self):
+        self.display.set_mode("sfr1_instrument")
+        _pump(self.root)
+        self.state.set_signal("Quantainium (3x) · Common")
+        _pump(self.root)
+        cv   = self.display._inst_canvas
+        text = cv.itemcget(self.display._inst_mineral, "text")
+        self.assertIn("Quantainium", text)
+
+    def test_instrument_recent_slots_filled_after_signals(self):
+        self.display.set_mode("sfr1_instrument")
+        _pump(self.root)
+        for sig in ["Alpha (1x) · Rare", "Beta (2x) · Common", "Gamma (3x) · Common"]:
+            self.state.set_signal(sig)
+            _pump(self.root)
+        cv    = self.display._inst_canvas
+        texts = [cv.itemcget(tid, "text") for tid in self.display._recent_texts]
+        self.assertTrue(any(t.strip() for t in texts))
+
+    # ── set_mode switching ────────────────────────────────────────────────
+
+    def test_set_mode_off_withdraws_window(self):
+        self.display.set_mode("off")
+        _pump(self.root)
+        self.assertFalse(_is_mapped(self.display._win))
+
+    def test_set_mode_off_updates_config(self):
+        self.display.set_mode("off")
+        self.assertEqual(self.config["display_mode"], "off")
+
+    def test_set_mode_instrument_updates_config(self):
+        self.display.set_mode("sfr1_instrument")
+        self.assertEqual(self.config["display_mode"], "sfr1_instrument")
+
+    def test_set_mode_off_clears_canvas_refs(self):
+        self.display.set_mode("off")
+        _pump(self.root)
+        self.assertIsNone(self.display._glass_canvas)
+        self.assertIsNone(self.display._inst_canvas)
+
+    def test_set_mode_off_then_slim_shows_window(self):
+        self.display.set_mode("off")
+        _pump(self.root)
+        self.display.set_mode("sfr1_slim")
+        _pump(self.root)
+        self.assertTrue(_is_mapped(self.display._win))
+
+    def test_set_mode_instrument_then_back_to_slim(self):
+        self.display.set_mode("sfr1_instrument")
+        _pump(self.root)
+        self.display.set_mode("sfr1_slim")
+        _pump(self.root)
+        self.assertEqual(self.display._mode, "sfr1_slim")
+        self.assertTrue(_is_mapped(self.display._win))
+
+
+# ===========================================================================
+# 5. SetupWizard UI
 # ===========================================================================
 
 class TestSetupWizardUI(unittest.TestCase):
@@ -717,6 +959,8 @@ if __name__ == "__main__":
         TestAppState,
         TestOverlayWindow,
         TestControlPanel,
+        TestParseSignal,
+        TestDisplayWindow,
         TestSetupWizardUI,
     ]:
         suite.addTests(loader.loadTestsFromTestCase(cls))
