@@ -17,6 +17,7 @@ from pathlib import Path
 import tkinter as tk
 
 from app_state import AppState
+from audio_manager import AudioManager
 from control_panel import ControlPanel
 from tray_icon import TrayIcon
 
@@ -46,7 +47,7 @@ def load_json(path: Path) -> dict:
 # Scan loop (imported logic, runs in background thread)
 # ---------------------------------------------------------------------------
 
-def _build_scan_loop(state: AppState):
+def _build_scan_loop(state: AppState, audio: "AudioManager"):
     """
     Returns a scan_loop function that uses the given AppState.
     Imports overlay internals here to avoid circular imports.
@@ -67,6 +68,8 @@ def _build_scan_loop(state: AppState):
                 if result != last_key:
                     last_key = result
                     state.set_signal(result)
+                    if result:
+                        audio.play_signal(result)
 
             except Exception as exc:
                 print(f"[scan_loop] {exc}")
@@ -80,7 +83,7 @@ def _build_scan_loop(state: AppState):
 # Hotkey listener
 # ---------------------------------------------------------------------------
 
-def _start_hotkey_listener(state: AppState, config: dict):
+def _start_hotkey_listener(state: AppState, config: dict, audio: "AudioManager"):
     try:
         import keyboard
     except ImportError:
@@ -92,6 +95,10 @@ def _start_hotkey_listener(state: AppState, config: dict):
     def on_hotkey():
         state.toggle_pause()
         print(f"[hotkey] Scanner {'paused' if state.paused else 'active'}")
+        if state.paused:
+            audio.play_deactivate()
+        else:
+            audio.play_activate()
 
     try:
         keyboard.add_hotkey(hotkey, on_hotkey)
@@ -108,7 +115,7 @@ def main():
     # --- Setup wizard ---
     if "--setup" in sys.argv:
         from setup_wizard import SetupWizard
-        SetupWizard().run()
+        SetupWizard(audio_manager=None).run()  # audio not yet loaded here
 
     # --- Load config and lookup ---
     try:
@@ -131,6 +138,9 @@ def main():
     # --- Shared state ---
     state = AppState(config)
 
+    # --- Audio ---
+    audio = AudioManager(config)
+
     # --- Tkinter root (hidden – ControlPanel and Overlay are Toplevels) ---
     root = tk.Tk()
     root.withdraw()
@@ -141,7 +151,7 @@ def main():
     overlay = OverlayWindow(root, config, state)
 
     # --- Control panel ---
-    panel = ControlPanel(root, config, state, overlay, BASE_DIR)
+    panel = ControlPanel(root, config, state, overlay, BASE_DIR, audio)
 
     # --- Tray icon ---
     tray = TrayIcon(state, panel, BASE_DIR)
@@ -149,12 +159,15 @@ def main():
     tray_thread.start()
 
     # --- Scan loop thread ---
-    scan_fn = _build_scan_loop(state)
+    scan_fn = _build_scan_loop(state, audio)
     scan_thread = threading.Thread(target=scan_fn, daemon=True)
     scan_thread.start()
 
     # --- Hotkey ---
-    _start_hotkey_listener(state, config)
+    _start_hotkey_listener(state, config, audio)
+
+    # --- Startup sound ---
+    audio.play_init()
 
     # --- Mainloop ---
     print("SC Signature Reader started.")

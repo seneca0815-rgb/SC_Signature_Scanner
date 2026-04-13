@@ -27,5 +27,13 @@
   "fg_color": "#4fc3c3",
   "font_family": "Consolas",
   "font_size": 13,
-  "wrap_width": 400
+  "wrap_width": 400,
+
+  "_audio": "Audio output settings",
+  "audio_enabled":          true,
+  "audio_volume":           0.8,
+  "audio_voice_init":       true,
+  "audio_sound_activate":   true,
+  "audio_sound_deactivate": true,
+  "audio_sound_signal":     false
 }

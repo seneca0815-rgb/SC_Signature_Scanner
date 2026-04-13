@@ -41,12 +41,13 @@ def _load_themes(base_dir: Path) -> dict:
 class ControlPanel:
 
     def __init__(self, root: tk.Tk, config: dict, state: AppState,
-                 overlay, base_dir: Path):
+                 overlay, base_dir: Path, audio=None):
         self._root      = root
         self._config    = config
         self._state     = state
         self._overlay   = overlay
         self._base_dir  = base_dir
+        self._audio     = audio
         self._themes    = _load_themes(base_dir)
         self._minimised = False
 
@@ -54,7 +55,7 @@ class ControlPanel:
         self._win.title("Vargo Dynamics  ·  SC Signature Reader")
         self._win.configure(bg=C_BG)
         self._win.resizable(False, False)
-        self._win.geometry("340x520")
+        self._win.geometry("340x660")
         self._win.protocol("WM_DELETE_WINDOW", self._on_close)
 
         # Centre on screen
@@ -62,8 +63,8 @@ class ControlPanel:
         sw = self._win.winfo_screenwidth()
         sh = self._win.winfo_screenheight()
         x  = (sw - 340) // 2
-        y  = (sh - 520) // 2
-        self._win.geometry(f"340x520+{x}+{y}")
+        y  = (sh - 660) // 2
+        self._win.geometry(f"340x660+{x}+{y}")
 
         self._build_ui()
 
@@ -202,6 +203,72 @@ class ControlPanel:
 
         self._build_divider(w)
 
+        # ── Audio ────────────────────────────────────────────────────────
+        self._build_section(w, "AUDIO")
+
+        # Row 1 – master on/off
+        audio_row1 = tk.Frame(w, bg=C_BG)
+        audio_row1.pack(fill="x", padx=16, pady=(0, 2))
+
+        tk.Label(audio_row1, text="Audio",
+                 bg=C_BG, fg=C_TEXT,
+                 font=("Courier New", 11)).pack(side="left")
+
+        self._audio_btn_lbl = "ON" if self._config.get("audio_enabled", True) else "OFF"
+        self._audio_toggle_btn = tk.Button(
+            audio_row1,
+            text=self._audio_btn_lbl,
+            bg=C_BORDER, fg=C_TEXT,
+            activebackground=C_SURFACE, activeforeground=C_CYAN,
+            font=("Courier New", 10), relief="flat",
+            padx=10, pady=3,
+            command=self._on_audio_toggle)
+        self._audio_toggle_btn.pack(side="right")
+        self._refresh_audio_toggle_btn()
+
+        # Row 2 – volume
+        audio_row2 = tk.Frame(w, bg=C_BG)
+        audio_row2.pack(fill="x", padx=16, pady=(0, 2))
+
+        tk.Label(audio_row2, text="Volume",
+                 bg=C_BG, fg=C_TEXT,
+                 font=("Courier New", 11)).pack(side="left")
+
+        init_vol = int(self._config.get("audio_volume", 0.8) * 100)
+        self._volume_var = tk.IntVar(value=init_vol)
+        tk.Scale(
+            audio_row2,
+            variable=self._volume_var,
+            from_=0, to=100,
+            orient="horizontal",
+            bg=C_BG, fg=C_TEXT,
+            troughcolor=C_SURFACE, highlightthickness=0,
+            activebackground=C_CYAN,
+            font=("Courier New", 9),
+            length=160,
+            showvalue=False,
+            command=self._on_volume_change,
+        ).pack(side="right")
+
+        # Row 3 – signal sound toggle
+        audio_row3 = tk.Frame(w, bg=C_BG)
+        audio_row3.pack(fill="x", padx=16, pady=(0, 4))
+
+        self._signal_sound_var = tk.BooleanVar(
+            value=self._config.get("audio_sound_signal", False))
+        tk.Checkbutton(
+            audio_row3,
+            text="Signal sound",
+            variable=self._signal_sound_var,
+            bg=C_BG, fg=C_MUTED,
+            selectcolor=C_SURFACE,
+            activebackground=C_BG, activeforeground=C_TEXT,
+            font=("Courier New", 9),
+            command=self._on_signal_sound_toggle,
+        ).pack(side="left")
+
+        self._build_divider(w)
+
         # ── Recent signals ───────────────────────────────────────────────
         self._build_section(w, "RECENT SIGNALS")
 
@@ -242,6 +309,30 @@ class ControlPanel:
 
         # Bottom cyan bar
         tk.Frame(w, bg=C_CYAN, height=2).pack(fill="x", side="bottom")
+
+    def _on_audio_toggle(self):
+        enabled = not self._config.get("audio_enabled", True)
+        self._config["audio_enabled"] = enabled
+        self._refresh_audio_toggle_btn()
+        if enabled and self._audio:
+            self._audio.play_activate()
+
+    def _refresh_audio_toggle_btn(self):
+        if not hasattr(self, "_audio_toggle_btn"):
+            return
+        enabled = self._config.get("audio_enabled", True)
+        if enabled:
+            self._audio_toggle_btn.config(text="ON",  fg=C_GREEN)
+        else:
+            self._audio_toggle_btn.config(text="OFF", fg=C_RED)
+
+    def _on_volume_change(self, value):
+        vol = int(float(value)) / 100.0
+        if self._audio:
+            self._audio.set_volume(vol)
+
+    def _on_signal_sound_toggle(self):
+        self._config["audio_sound_signal"] = bool(self._signal_sound_var.get())
 
     def _build_section(self, parent, title: str):
         row = tk.Frame(parent, bg=C_BG)
