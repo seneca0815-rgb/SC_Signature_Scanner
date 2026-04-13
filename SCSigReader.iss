@@ -53,6 +53,7 @@ Source: "config.json";                DestDir: "{app}"; Flags: ignoreversion
 Source: "lookup.json";                DestDir: "{app}"; Flags: ignoreversion
 Source: "themes.py";                  DestDir: "{app}"; Flags: ignoreversion
 Source: "theme_preview.png";          DestDir: "{app}"; Flags: ignoreversion
+Source: "logger_setup.py";            DestDir: "{app}"; Flags: ignoreversion
 
 ; Brand assets
 Source: "vargo_icon.ico";            DestDir: "{app}"; Flags: ignoreversion
@@ -89,7 +90,8 @@ Name: "{commondesktop}\{#AppName}";   Filename: "{app}\{#AppExe}"; IconFilename:
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"
 
 [UninstallDelete]
-Type: files; Name: "{app}\config.json"
+Type: files;          Name: "{app}\config.json"
+Type: filesandordirs; Name: "{userappdata}\VargoDynamics\SCSigReader\logs"
 
 [Code]
 const

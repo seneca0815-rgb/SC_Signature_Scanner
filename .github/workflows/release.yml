@@ -85,6 +85,7 @@ jobs:
           --add-data "overlay_window.py;."
           --add-data "control_panel.py;."
           --add-data "tray_icon.py;."
+          --add-data "logger_setup.py;."
           --icon "vargo_icon.ico"
           --name "SCSigReader"
 
