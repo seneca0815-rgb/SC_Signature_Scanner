@@ -1,6 +1,6 @@
 # SC Signature Reader — User Manual
 
-**Vargo Dynamics** · Version 1.0
+**Vargo Dynamics** · Version 1.1
 
 ---
 
@@ -25,7 +25,7 @@ anything — it is fully ToS-compliant.
 
 ### Option A — Installer (recommended)
 
-1. Download `SCSigReader_Setup_1.0.exe` from the [Releases page](../../releases).
+1. Download `SCSigReader_Setup_1.1.exe` from the [Releases page](../../releases).
 2. Run the installer — it will also install **Tesseract OCR** automatically.
 3. The **Setup Wizard** opens at the end of installation. Complete it once.
 
@@ -46,6 +46,7 @@ It has five steps:
 | **Resolution** | Select the resolution you play Star Citizen at. If unsure, check Windows → Display Settings → Resolution. |
 | **Theme** | Choose how the overlay looks. A live preview is shown on the right. |
 | **Hotkey** | Choose a key to pause/resume the scanner while in-game. **Scroll Lock** is recommended — it is not used by Star Citizen. |
+| **Audio** | Configure audio feedback: startup announcement, scanner sounds and signal detection sound. |
 | **Finish** | Review your choices and click **Finish** to save and launch. |
 
 All settings are stored in `config.json` next to the executable and can be
@@ -72,12 +73,15 @@ The control panel opens when SC Signature Reader starts.
 │ THEME                               │
 │  [vargo ▾]              [preview]   │
 ├─────────────────────────────────────┤
+│ AUDIO                               │
+│  [ON]   Volume ████░░   Signal [OFF]│
+├─────────────────────────────────────┤
 │ RECENT SIGNALS                      │
 │  Quantainium (3x)  ·  Legendary     │
 │  Quartz (4x)  ·  Common             │
 │  Laranite (2x)  ·  Uncommon         │
 ├─────────────────────────────────────┤
-│ [MINIMISE TO TRAY]          [EXIT]  │
+│ [MINIMISE TO TRAY]  [LOG]  [EXIT]   │
 └─────────────────────────────────────┘
 ```
 
@@ -88,8 +92,10 @@ The control panel opens when SC Signature Reader starts.
 | **Hotkey** | The keyboard shortcut configured in the wizard. |
 | **LAST SIGNAL** | The most recent recognised signature and its lookup result. |
 | **THEME** | Change the overlay appearance live. The change is saved automatically. |
+| **AUDIO** | Master on/off, volume slider and signal sound toggle. |
 | **RECENT SIGNALS** | The last five distinct signatures detected this session. |
 | **MINIMISE TO TRAY** | Hides the control panel. The scanner keeps running. Right-click the tray icon to restore it. |
+| **LOG** | Opens the logs folder in Explorer — attach `scsigread.log` when reporting issues. |
 | **EXIT** | Stops the scanner completely and closes all windows. |
 
 ---
@@ -202,6 +208,49 @@ Themes can be switched live in the control panel without restarting.
 
 ---
 
+## Audio
+
+SC Signature Reader plays voice announcements and sound effects
+via WAV files from the `sounds\` folder.
+
+| Sound | Default | When it plays |
+|---|---|---|
+| **Startup** | On | App launches – *"Vargo Dynamics Scanner online."* |
+| **Activated** | On | Scanner resumed via hotkey or control panel |
+| **Deactivated** | On | Scanner paused via hotkey or control panel |
+| **Signal detected** | **Off** | Every time a signature is recognised |
+
+The signal sound is off by default — when actively scouting asteroids
+the overlay triggers frequently, and a sound on every detection
+becomes distracting quickly. Enable it in the control panel or
+`config.json` if you prefer audio feedback for each find.
+
+**Volume** is controlled via the Windows volume mixer
+(right-click the speaker icon in the taskbar → *SC Signature Reader*).
+The volume slider in the control panel and wizard stores your preference
+but the actual output level follows the system mixer.
+
+**Audio settings in the control panel:**
+
+| Control | Description |
+|---|---|
+| **ON / OFF toggle** | Master switch for all audio |
+| **Volume slider** | Stores preference (see note above) |
+| **Signal sound toggle** | Enable/disable the per-detection sound |
+
+**Audio settings in config.json:**
+
+```json
+"audio_enabled":          true,
+"audio_volume":           0.8,
+"audio_voice_init":       true,
+"audio_sound_activate":   true,
+"audio_sound_deactivate": true,
+"audio_sound_signal":     false
+```
+
+---
+
 ## Troubleshooting
 
 **The overlay never appears**
@@ -227,6 +276,22 @@ Themes can be switched live in the control panel without restarting.
 **"~" prefix in the result**
 - A tilde (`~`) means a fuzzy match was used (OCR read the number with a small error). The result is still likely correct. If you see frequent fuzzy matches, tighten the scan region.
 
+**No audio / sounds not playing**
+- Verify that the `sounds\` folder exists next to `SCSigReader.exe` and contains the WAV files.
+- Check `audio_enabled: true` in `config.json`.
+- Check the Windows volume mixer — SC Signature Reader may be muted independently from system volume.
+- If WAV files are missing the app falls back to a simple beep tone.
+
+**Reporting a problem**
+The fastest way to get help is to share your log file:
+
+1. Open the control panel.
+2. Click **LOG** in the footer — this opens the logs folder directly.
+3. Attach `scsigread.log` to your Spectrum reply or GitHub issue.
+
+The log contains your Tesseract version, scan region, theme and any errors
+that occurred — usually enough to diagnose the problem without back-and-forth.
+
 ---
 
 ## Files
@@ -237,6 +302,8 @@ Themes can be switched live in the control panel without restarting.
 | `config.json` | All settings — edit to fine-tune behaviour |
 | `lookup.json` | Signature → mineral name table (163 entries) |
 | `themes.py` | Theme colour definitions |
+| `sounds\` | WAV audio files (init, activate, deactivate, signal) |
+| `logs\scsigread.log` | Application log — share this when reporting issues |
 
 ---
 
@@ -246,8 +313,8 @@ Themes can be switched live in the control panel without restarting.
 SCSigReader.exe --setup
 ```
 
-This re-runs the full wizard and overwrites `scan_region`, `theme` and `hotkey`
-in `config.json`. All other settings are preserved.
+This re-runs the full wizard and overwrites `scan_region`, `theme`, `hotkey`
+and audio settings in `config.json`. All other settings are preserved.
 
 ---
 
