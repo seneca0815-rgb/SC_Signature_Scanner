@@ -168,17 +168,17 @@ class TestSetupWizardSaveIntegration(unittest.TestCase):
     def test_scan_region_written_for_1080p(self):
         cfg = self._run_save("1920 × 1080", "dark-gold")
         self.assertIn("scan_region", cfg)
-        self.assertEqual(cfg["scan_region"]["top"],  100)
-        self.assertEqual(cfg["scan_region"]["left"], 150)
+        self.assertEqual(cfg["scan_region"]["top"],  150)
+        self.assertEqual(cfg["scan_region"]["left"], 290)
 
     def test_scan_region_written_for_1440p(self):
         cfg = self._run_save("2560 × 1440", "dark-blue")
-        self.assertEqual(cfg["scan_region"]["top"],  130)
-        self.assertEqual(cfg["scan_region"]["left"], 200)
+        self.assertEqual(cfg["scan_region"]["top"],  200)
+        self.assertEqual(cfg["scan_region"]["left"], 380)
 
     def test_scan_region_written_for_ultrawide(self):
         cfg = self._run_save("3440 × 1440", "minimal")
-        self.assertEqual(cfg["scan_region"]["left"], 200)
+        self.assertEqual(cfg["scan_region"]["left"], 520)
 
     def test_theme_written_correctly(self):
         for theme_name in _load_themes():
