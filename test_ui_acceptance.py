@@ -57,17 +57,24 @@ from themes import THEMES as THEMES_DICT
 def _make_config() -> dict:
     """Minimal config dict sufficient for all UI components."""
     return {
-        "interval_ms":  500,
-        "theme":        "vargo",
-        "overlay_x":    30,
-        "overlay_y":    30,
-        "bg_color":     "#1a1a2a",
-        "fg_color":     "#4fc3c3",
-        "font_family":  "Consolas",
-        "font_size":    13,
-        "alpha":        0.90,
-        "wrap_width":   380,
-        "hotkey":       "F9",
+        "interval_ms":        500,
+        "theme":              "vargo",
+        "overlay_x":          30,
+        "overlay_y":          30,
+        "bg_color":           "#1a1a2a",
+        "fg_color":           "#4fc3c3",
+        "font_family":        "Consolas",
+        "font_size":          13,
+        "alpha":              0.90,
+        "wrap_width":         380,
+        "hotkey":             "F9",
+        # audio defaults
+        "audio_enabled":          True,
+        "audio_volume":           0.5,
+        "audio_voice_init":       True,
+        "audio_sound_activate":   True,
+        "audio_sound_deactivate": True,
+        "audio_sound_signal":     False,
     }
 
 
@@ -572,10 +579,10 @@ class TestSetupWizardUI(unittest.TestCase):
     def test_starts_on_step_0(self):
         self.assertEqual(self.wizard._step, 0)
 
-    def test_step_label_shows_step_1_of_5(self):
+    def test_step_label_shows_step_1_of_6(self):
         text = self.wizard._step_label.cget("text")
         self.assertIn("1", text)
-        self.assertIn("5", text)
+        self.assertIn("6", text)
 
     def test_back_button_disabled_on_first_step(self):
         self.assertEqual(str(self.wizard._btn_back.cget("state")), "disabled")
@@ -635,8 +642,8 @@ class TestSetupWizardUI(unittest.TestCase):
             self._pump()
         self.assertLessEqual(self.wizard._step, last)
 
-    def test_five_steps_total(self):
-        self.assertEqual(len(self.wizard.STEPS), 5)
+    def test_six_steps_total(self):
+        self.assertEqual(len(self.wizard.STEPS), 6)
 
     def test_all_pages_have_a_method(self):
         for step in self.wizard.STEPS:
@@ -675,14 +682,14 @@ class TestSetupWizardUI(unittest.TestCase):
     # --- hotkey page content ---
 
     def test_hotkey_page_has_widgets(self):
-        for _ in range(3):   # welcome → resolution → theme → hotkey
+        for _ in range(4):   # welcome → resolution → theme → audio → hotkey
             self.wizard._btn_next.invoke()
             self._pump()
         self.assertGreater(len(self.wizard._frame.winfo_children()), 0)
 
     def test_hotkey_page_radio_count_matches_options(self):
         from setup_wizard import HOTKEYS
-        for _ in range(3):
+        for _ in range(4):   # welcome → resolution → theme → audio → hotkey
             self.wizard._btn_next.invoke()
             self._pump()
         n_radios = _count_by_class(self.wizard._frame, "Radiobutton")
@@ -715,6 +722,193 @@ class TestSetupWizardUI(unittest.TestCase):
         all_text = _collect_text(self.wizard._frame)
         self.assertIn(selected_theme, all_text)
 
+    # --- audio page content ---
+
+    def test_audio_page_has_widgets(self):
+        for _ in range(3):   # welcome → resolution → theme → audio
+            self.wizard._btn_next.invoke()
+            self._pump()
+        self.assertGreater(len(self.wizard._frame.winfo_children()), 0)
+
+    def test_audio_page_default_volume_is_50(self):
+        self.assertEqual(self.wizard._volume_var.get(), 50)
+
+    def test_audio_page_enable_audio_default_true(self):
+        self.assertTrue(self.wizard._audio_var.get())
+
+    def test_audio_page_signal_sound_default_false(self):
+        self.assertFalse(self.wizard._audio_signal_var.get())
+
+    def test_audio_page_startup_sound_default_true(self):
+        self.assertTrue(self.wizard._audio_init_var.get())
+
+    def test_audio_page_activate_sound_default_true(self):
+        self.assertTrue(self.wizard._audio_activate_var.get())
+
+    def test_audio_page_deactivate_sound_default_true(self):
+        self.assertTrue(self.wizard._audio_deact_var.get())
+
+    def test_audio_page_has_checkboxes(self):
+        for _ in range(3):
+            self.wizard._btn_next.invoke()
+            self._pump()
+        # "Enable audio output" + 4 individual sound checkboxes = 5
+        n_checks = _count_by_class(self.wizard._frame, "Checkbutton")
+        self.assertGreaterEqual(n_checks, 5)
+
+    def test_audio_page_has_test_button(self):
+        for _ in range(3):
+            self.wizard._btn_next.invoke()
+            self._pump()
+        all_text = _collect_text(self.wizard._frame)
+        self.assertIn("TEST AUDIO", all_text)
+
+    def test_finish_page_shows_audio_status(self):
+        for _ in range(len(self.wizard.STEPS) - 1):
+            self.wizard._btn_next.invoke()
+            self._pump()
+        all_text = _collect_text(self.wizard._frame)
+        self.assertIn("Audio", all_text)
+
+
+# ===========================================================================
+# 5. ControlPanel – Audio
+# ===========================================================================
+
+class TestControlPanelAudio(unittest.TestCase):
+    """Audio controls in the control panel: master toggle, volume, signal sound,
+    and scanner toggle → audio callback wiring."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.root = tk.Tk()
+        cls.root.withdraw()
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.root.destroy()
+        except Exception:
+            pass
+
+    def setUp(self):
+        self.config = _make_config()
+        self.state  = AppState(self.config)
+        self.fake_overlay = type("FakeOverlay", (), {
+            "apply_theme": lambda self, t: None})()
+        self.mock_audio = unittest.mock.MagicMock()
+        self.panel = ControlPanel(
+            self.root, self.config, self.state,
+            self.fake_overlay, PROJECT_ROOT,
+            audio=self.mock_audio)
+        _pump(self.root)
+
+    def tearDown(self):
+        try:
+            _pump(self.root)
+        except Exception:
+            pass
+        try:
+            self.panel._win.destroy()
+        except Exception:
+            pass
+
+    # --- master audio toggle ---
+
+    def test_audio_toggle_btn_initial_text_is_on(self):
+        self.assertEqual(self.panel._audio_toggle_btn.cget("text"), "ON")
+
+    def test_audio_toggle_click_disables_audio(self):
+        self.panel._audio_toggle_btn.invoke()
+        self.assertFalse(self.config["audio_enabled"])
+
+    def test_audio_toggle_click_changes_text_to_off(self):
+        self.panel._audio_toggle_btn.invoke()
+        _pump(self.root)
+        self.assertEqual(self.panel._audio_toggle_btn.cget("text"), "OFF")
+
+    def test_audio_toggle_click_twice_re_enables(self):
+        self.panel._audio_toggle_btn.invoke()
+        self.panel._audio_toggle_btn.invoke()
+        _pump(self.root)
+        self.assertTrue(self.config["audio_enabled"])
+        self.assertEqual(self.panel._audio_toggle_btn.cget("text"), "ON")
+
+    def test_audio_toggle_enable_plays_activate_sound(self):
+        """Re-enabling audio must play the activate sound as feedback."""
+        self.panel._audio_toggle_btn.invoke()  # disable
+        self.mock_audio.reset_mock()
+        self.panel._audio_toggle_btn.invoke()  # re-enable
+        self.mock_audio.play_activate.assert_called_once()
+
+    def test_audio_toggle_disable_does_not_play_sound(self):
+        self.panel._audio_toggle_btn.invoke()  # disable
+        self.mock_audio.play_activate.assert_not_called()
+
+    # --- volume slider ---
+
+    def test_volume_slider_default_is_50(self):
+        self.assertEqual(self.panel._volume_var.get(), 50)
+
+    def test_volume_change_calls_set_volume(self):
+        self.panel._on_volume_change("75")
+        self.mock_audio.set_volume.assert_called_once_with(0.75)
+
+    def test_volume_change_zero_calls_set_volume_zero(self):
+        self.panel._on_volume_change("0")
+        self.mock_audio.set_volume.assert_called_once_with(0.0)
+
+    def test_volume_change_full_calls_set_volume_one(self):
+        self.panel._on_volume_change("100")
+        self.mock_audio.set_volume.assert_called_once_with(1.0)
+
+    # --- signal sound checkbox ---
+
+    def test_signal_sound_checkbox_default_is_off(self):
+        self.assertFalse(self.panel._signal_sound_var.get())
+
+    def test_signal_sound_toggle_updates_config(self):
+        self.panel._signal_sound_var.set(True)
+        self.panel._on_signal_sound_toggle()
+        self.assertTrue(self.config["audio_sound_signal"])
+
+    def test_signal_sound_toggle_off_updates_config(self):
+        self.panel._signal_sound_var.set(True)
+        self.panel._on_signal_sound_toggle()
+        self.panel._signal_sound_var.set(False)
+        self.panel._on_signal_sound_toggle()
+        self.assertFalse(self.config["audio_sound_signal"])
+
+    # --- scanner toggle → audio callbacks ---
+
+    def test_scanner_pause_calls_play_deactivate(self):
+        self.panel._toggle_btn.invoke()  # pause
+        _pump(self.root)
+        self.mock_audio.play_deactivate.assert_called_once()
+        self.mock_audio.play_activate.assert_not_called()
+
+    def test_scanner_resume_calls_play_activate(self):
+        self.panel._toggle_btn.invoke()  # pause
+        self.mock_audio.reset_mock()
+        self.panel._toggle_btn.invoke()  # resume
+        _pump(self.root)
+        self.mock_audio.play_activate.assert_called_once()
+        self.mock_audio.play_deactivate.assert_not_called()
+
+    def test_scanner_toggle_without_audio_no_crash(self):
+        """Panel created without audio manager must not raise on toggle."""
+        panel_no_audio = ControlPanel(
+            self.root, _make_config(), AppState(_make_config()),
+            self.fake_overlay, PROJECT_ROOT)
+        _pump(self.root)
+        try:
+            panel_no_audio._toggle_btn.invoke()
+            _pump(self.root)
+        except Exception as e:
+            self.fail(f"toggle raised unexpectedly without audio: {e}")
+        finally:
+            panel_no_audio._win.destroy()
+
 
 # ===========================================================================
 # Runner
@@ -728,6 +922,7 @@ if __name__ == "__main__":
         TestAppState,
         TestOverlayWindow,
         TestControlPanel,
+        TestControlPanelAudio,
         TestSetupWizardUI,
     ]:
         suite.addTests(loader.loadTestsFromTestCase(cls))
