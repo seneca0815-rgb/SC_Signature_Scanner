@@ -99,13 +99,22 @@ def init(config_path: Path, lookup_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def capture_roi() -> np.ndarray:
-    """Screenshot als BGR-numpy-Array."""
-    with mss.mss() as sct:
-        raw = sct.grab(ROI)
+def capture_roi(sct: mss.mss = None) -> np.ndarray:
+    """Screenshot als BGR-numpy-Array.
+
+    `sct` is an optional pre-created mss.mss() instance.  Passing one in
+    avoids the per-call OS display-context setup overhead (~20-50 ms).
+    """
+    def _grab(s):
+        raw = s.grab(ROI)
         img = np.frombuffer(raw.bgra, dtype=np.uint8)
         img = img.reshape((raw.height, raw.width, 4))
         return cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
+
+    if sct is not None:
+        return _grab(sct)
+    with mss.mss() as s:
+        return _grab(s)
 
 
 def find_orange_regions(bgr: np.ndarray) -> list[tuple[int,int,int,int]]:
@@ -217,15 +226,14 @@ def ocr_text(img: Image.Image) -> str:
         ).strip()
         cleaned = re.sub(r"[^\d]", "", raw)
         if cleaned:
+            # Early exit: if this threshold already gives an exact lookup hit,
+            # skip the remaining thresholds to avoid 2 unnecessary Tesseract calls.
+            if cleaned in lookup:
+                return cleaned
             candidates.append(cleaned)
 
     if not candidates:
         return ""
-
-    # Priority 1: exact key in the lookup table
-    for c in candidates:
-        if c in lookup:
-            return c
 
     # Priority 2: any fuzzy / substring match in the lookup table
     for c in candidates:
@@ -302,12 +310,12 @@ def lookup_text(raw: str) -> str | None:
 # Schritt 4: Scan-Loop mit Voting
 # ---------------------------------------------------------------------------
 
-def scan_once() -> list[tuple[str, str]]:
+def scan_once(sct=None) -> list[tuple[str, str]]:
     """
     Ein Scan-Durchlauf.
     Gibt Liste von (erkannte_zahl, lookup_ergebnis) zurück.
     """
-    bgr     = capture_roi()
+    bgr     = capture_roi(sct)
     regions = find_orange_regions(bgr)
     hits    = []
 
@@ -361,31 +369,40 @@ def scan_loop(overlay: "OverlayWindow"):
     buffer: list[str] = []
     last_shown = None
 
-    while True:
-        try:
-            hits = scan_once()
-            if hits:
-                # Bestes Hit (höchste Lookup-Priorität = erstes in der Liste)
-                buffer.append(hits[0][1])
-            else:
-                buffer.append("")
+    # Reuse a single mss context for the lifetime of the scan loop.
+    # Creating mss.mss() on every capture costs ~20-50 ms per call.
+    with mss.mss() as sct:
+        while True:
+            t0 = time.monotonic()
+            try:
+                hits = scan_once(sct)
+                if hits:
+                    # Bestes Hit (höchste Lookup-Priorität = erstes in der Liste)
+                    buffer.append(hits[0][1])
+                else:
+                    buffer.append("")
 
-            # Nur die letzten N Frames behalten
-            buffer = buffer[-VOTE_FRAMES:]
+                # Nur die letzten N Frames behalten
+                buffer = buffer[-VOTE_FRAMES:]
 
-            if len(buffer) == VOTE_FRAMES:
-                winner = Counter(buffer).most_common(1)[0][0]
-                if winner != last_shown:
-                    last_shown = winner
-                    if winner:
-                        overlay.show(f"ℹ  {winner}")
-                    else:
-                        overlay.hide()
+                if len(buffer) == VOTE_FRAMES:
+                    winner = Counter(buffer).most_common(1)[0][0]
+                    if winner != last_shown:
+                        last_shown = winner
+                        if winner:
+                            overlay.show(f"ℹ  {winner}")
+                        else:
+                            overlay.hide()
 
-        except Exception as exc:
-            log.error("scan_loop error: %s", exc)
+            except Exception as exc:
+                log.error("scan_loop error: %s", exc)
 
-        time.sleep(INTERVAL)
+            # Sleep only the remaining time so that scan duration doesn't add
+            # on top of the configured interval.
+            elapsed = time.monotonic() - t0
+            remaining = INTERVAL - elapsed
+            if remaining > 0:
+                time.sleep(remaining)
 
 
 # ---------------------------------------------------------------------------
