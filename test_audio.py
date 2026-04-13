@@ -24,10 +24,14 @@ def _make_fake_winsound():
     mod.Beep       = MagicMock()
     mod.PlaySound  = MagicMock()
     # Exact values from the Windows SDK
-    mod.SND_FILENAME = 0x00020000   # 131072
-    mod.SND_ASYNC    = 0x0001       # 1
-    mod.SND_NODEFAULT = 0x0002      # 2
+    mod.SND_FILENAME  = 0x00020000   # 131072
+    mod.SND_ASYNC     = 0x0001       # 1
+    mod.SND_NODEFAULT = 0x0002       # 2
+    mod.SND_MEMORY    = 0x0004       # 4
     return mod
+
+
+_FAKE_WAV_BYTES = b"RIFF\x24\x00\x00\x00WAVEfmt "  # dummy bytes for SND_MEMORY tests
 
 
 def _reload_audio(fake_winsound=None):
@@ -147,7 +151,8 @@ class TestFlagGuards(unittest.TestCase):
         """When signal flag is explicitly True a sound attempt is made."""
         fake_path = Path("/fake/sounds/signal.wav")
         mgr = self._make(audio_sound_signal=True)
-        with patch.object(mgr, "_get_sound_path", return_value=fake_path):
+        with patch.object(mgr, "_get_sound_path", return_value=fake_path), \
+             patch.object(mgr, "_apply_volume", return_value=_FAKE_WAV_BYTES):
             mgr.play_signal("Taranite")
             self._drain(mgr)
         self._ws.PlaySound.assert_called_once()
@@ -158,7 +163,7 @@ class TestFlagGuards(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestPlayWavFound(unittest.TestCase):
-    """When a WAV file exists, PlaySound must be called with SND_FILENAME | SND_ASYNC."""
+    """When a WAV file exists, PlaySound must be called with SND_MEMORY and scaled bytes."""
 
     def setUp(self):
         self._ws = _make_fake_winsound()
@@ -178,36 +183,40 @@ class TestPlayWavFound(unittest.TestCase):
     def _drain(self, mgr):
         mgr._executor.shutdown(wait=True)
 
-    def test_play_wav_calls_playsound(self):
+    def test_play_wav_uses_snd_memory(self):
+        """When volume scaling succeeds, PlaySound must use SND_MEMORY with bytes."""
         fake_path = Path("/fake/sounds/activate.wav")
         mgr = self._make()
-        with patch.object(mgr, "_get_sound_path", return_value=fake_path):
+        with patch.object(mgr, "_get_sound_path", return_value=fake_path), \
+             patch.object(mgr, "_apply_volume", return_value=_FAKE_WAV_BYTES):
             mgr._play_wav("activate")
-        expected_flags = self._ws.SND_FILENAME | self._ws.SND_ASYNC
-        self._ws.PlaySound.assert_called_once_with(str(fake_path), expected_flags)
+        self._ws.PlaySound.assert_called_once_with(
+            _FAKE_WAV_BYTES, self._ws.SND_MEMORY)
 
-    def test_snd_async_flag_is_set(self):
-        """SND_ASYNC must be present so PlaySound doesn't block the worker thread."""
+    def test_play_wav_falls_back_to_snd_filename_when_scaling_fails(self):
+        """When _apply_volume returns None, fall back to SND_FILENAME."""
         fake_path = Path("/fake/sounds/init.wav")
         mgr = self._make()
-        with patch.object(mgr, "_get_sound_path", return_value=fake_path):
+        with patch.object(mgr, "_get_sound_path", return_value=fake_path), \
+             patch.object(mgr, "_apply_volume", return_value=None):
             mgr._play_wav("init")
-        _, flags = self._ws.PlaySound.call_args[0]
-        self.assertTrue(flags & self._ws.SND_ASYNC,
-                        "SND_ASYNC must be set for non-blocking playback")
+        self._ws.PlaySound.assert_called_once_with(
+            str(fake_path), self._ws.SND_FILENAME)
 
-    def test_snd_filename_flag_is_set(self):
+    def test_snd_memory_flag_is_used_for_scaled_audio(self):
         fake_path = Path("/fake/sounds/signal.wav")
         mgr = self._make()
-        with patch.object(mgr, "_get_sound_path", return_value=fake_path):
+        with patch.object(mgr, "_get_sound_path", return_value=fake_path), \
+             patch.object(mgr, "_apply_volume", return_value=_FAKE_WAV_BYTES):
             mgr._play_wav("signal")
         _, flags = self._ws.PlaySound.call_args[0]
-        self.assertTrue(flags & self._ws.SND_FILENAME)
+        self.assertEqual(flags, self._ws.SND_MEMORY)
 
     def test_play_activate_triggers_playsound_not_beep(self):
         fake_path = Path("/fake/sounds/activate.wav")
         mgr = self._make()
-        with patch.object(mgr, "_get_sound_path", return_value=fake_path):
+        with patch.object(mgr, "_get_sound_path", return_value=fake_path), \
+             patch.object(mgr, "_apply_volume", return_value=_FAKE_WAV_BYTES):
             mgr.play_activate()
             self._drain(mgr)
         self._ws.PlaySound.assert_called_once()
@@ -216,10 +225,20 @@ class TestPlayWavFound(unittest.TestCase):
     def test_play_deactivate_triggers_playsound_not_beep(self):
         fake_path = Path("/fake/sounds/deactivate.wav")
         mgr = self._make()
-        with patch.object(mgr, "_get_sound_path", return_value=fake_path):
+        with patch.object(mgr, "_get_sound_path", return_value=fake_path), \
+             patch.object(mgr, "_apply_volume", return_value=_FAKE_WAV_BYTES):
             mgr.play_deactivate()
             self._drain(mgr)
         self._ws.PlaySound.assert_called_once()
+        self._ws.Beep.assert_not_called()
+
+    def test_muted_volume_skips_playback(self):
+        """When volume is 0.0 the sound must be skipped entirely."""
+        fake_path = Path("/fake/sounds/activate.wav")
+        mgr = self._make(audio_volume=0.0)
+        with patch.object(mgr, "_get_sound_path", return_value=fake_path):
+            mgr._play_wav("activate")
+        self._ws.PlaySound.assert_not_called()
         self._ws.Beep.assert_not_called()
 
 

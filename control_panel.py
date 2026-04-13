@@ -354,6 +354,11 @@ class ControlPanel:
 
     def _on_toggle(self):
         self._state.toggle_pause()
+        if self._audio:
+            if self._state.paused:
+                self._audio.play_deactivate()
+            else:
+                self._audio.play_activate()
 
     def _on_theme_change(self, _event=None):
         name  = self._theme_var.get()

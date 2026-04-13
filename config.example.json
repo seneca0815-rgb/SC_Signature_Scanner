@@ -31,7 +31,7 @@
 
   "_audio": "Audio output settings",
   "audio_enabled":          true,
-  "audio_volume":           0.8,
+  "audio_volume":           0.5,
   "audio_voice_init":       true,
   "audio_sound_activate":   true,
   "audio_sound_deactivate": true,

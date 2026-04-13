@@ -106,7 +106,7 @@ class SetupWizard:
 
         # Audio vars
         self._audio_var          = tk.BooleanVar(value=True)
-        self._volume_var         = tk.IntVar(value=80)
+        self._volume_var         = tk.IntVar(value=50)
         self._audio_init_var     = tk.BooleanVar(value=True)
         self._audio_activate_var = tk.BooleanVar(value=True)
         self._audio_deact_var    = tk.BooleanVar(value=True)
