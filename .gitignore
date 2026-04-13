@@ -52,6 +52,12 @@ config.json
 test_fixtures/*.png
 
 # ---------------------------------------------------------------
+# Audio – WAV files may be licensed (e.g. ElevenLabs); never commit them.
+# The sounds/ folder structure is tracked via sounds/.gitkeep
+# ---------------------------------------------------------------
+sounds/*.wav
+
+# ---------------------------------------------------------------
 # Old / scratch files
 # ---------------------------------------------------------------
 old/

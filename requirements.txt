@@ -5,4 +5,3 @@ pillow==12.2.0
 pytesseract==0.3.13
 pystray==0.19.5
 keyboard==0.13.5
-pyttsx3

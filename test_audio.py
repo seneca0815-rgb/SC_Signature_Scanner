@@ -1,297 +1,492 @@
 """
 test_audio.py  –  SC Signature Reader
 Unit tests for AudioManager.
-All winsound.Beep and pyttsx3 calls are mocked so no actual sound plays.
+winsound is mocked so no actual sound plays during testing.
 """
 
+import os
+import shutil
 import sys
+import tempfile
 import time
 import types
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch, call
 
 
 # ---------------------------------------------------------------------------
-# Helpers to inject/remove fake winsound / pyttsx3 in sys.modules
+# Helpers – inject a fake winsound with the constants AudioManager needs
 # ---------------------------------------------------------------------------
 
 def _make_fake_winsound():
     mod = types.ModuleType("winsound")
-    mod.Beep = MagicMock()
+    mod.Beep       = MagicMock()
+    mod.PlaySound  = MagicMock()
+    # Exact values from the Windows SDK
+    mod.SND_FILENAME = 0x00020000   # 131072
+    mod.SND_ASYNC    = 0x0001       # 1
+    mod.SND_NODEFAULT = 0x0002      # 2
     return mod
 
 
-def _make_fake_pyttsx3():
-    engine_mock = MagicMock()
-    mod = types.ModuleType("pyttsx3")
-    mod.init = MagicMock(return_value=engine_mock)
-    return mod, engine_mock
+def _reload_audio(fake_winsound=None):
+    """Reload audio_manager with the supplied fake winsound in sys.modules."""
+    if fake_winsound is not None:
+        sys.modules["winsound"] = fake_winsound
+    else:
+        sys.modules.pop("winsound", None)
+    import importlib
+    import audio_manager
+    importlib.reload(audio_manager)
+    return audio_manager
 
 
 # ---------------------------------------------------------------------------
-# Tests
+# Tests – audio disabled (master switch off)
 # ---------------------------------------------------------------------------
 
 class TestAudioManagerDisabled(unittest.TestCase):
-    """When audio_enabled is False, no beeps or TTS should fire."""
+    """When audio_enabled is False nothing should play."""
 
     def setUp(self):
-        self._fake_ws = _make_fake_winsound()
-        self._fake_pyttsx3, self._tts_engine = _make_fake_pyttsx3()
-        sys.modules["winsound"] = self._fake_ws
-        sys.modules["pyttsx3"] = self._fake_pyttsx3
-        # Reload to pick up mocked modules
-        import importlib
-        import audio_manager
-        importlib.reload(audio_manager)
-        from audio_manager import AudioManager
-        self.AudioManager = AudioManager
+        self._ws = _make_fake_winsound()
+        self._am = _reload_audio(self._ws)
+        self.AudioManager = self._am.AudioManager
 
     def tearDown(self):
         sys.modules.pop("winsound", None)
-        sys.modules.pop("pyttsx3", None)
 
-    def _make(self, extra=None):
+    def _make(self):
         cfg = {"audio_enabled": False, "audio_volume": 0.8,
                "audio_voice_init": True, "audio_sound_activate": True,
                "audio_sound_deactivate": True, "audio_sound_signal": True}
-        if extra:
-            cfg.update(extra)
         return self.AudioManager(cfg)
 
     def _drain(self, mgr):
-        """Wait for the executor queue to drain."""
         mgr._executor.shutdown(wait=True)
 
-    def test_play_init_no_sound_when_disabled(self):
+    def test_play_init_silent(self):
         mgr = self._make()
         mgr.play_init()
         self._drain(mgr)
-        self._fake_pyttsx3.init.assert_not_called()
-        self._fake_ws.Beep.assert_not_called()
+        self._ws.PlaySound.assert_not_called()
+        self._ws.Beep.assert_not_called()
 
-    def test_play_activate_no_sound_when_disabled(self):
+    def test_play_activate_silent(self):
         mgr = self._make()
         mgr.play_activate()
         self._drain(mgr)
-        self._fake_ws.Beep.assert_not_called()
+        self._ws.PlaySound.assert_not_called()
+        self._ws.Beep.assert_not_called()
 
-    def test_play_deactivate_no_sound_when_disabled(self):
+    def test_play_deactivate_silent(self):
         mgr = self._make()
         mgr.play_deactivate()
         self._drain(mgr)
-        self._fake_ws.Beep.assert_not_called()
+        self._ws.PlaySound.assert_not_called()
+        self._ws.Beep.assert_not_called()
 
-    def test_play_signal_no_sound_when_disabled(self):
+    def test_play_signal_silent(self):
         mgr = self._make()
         mgr.play_signal("Taranite")
         self._drain(mgr)
-        self._fake_ws.Beep.assert_not_called()
+        self._ws.PlaySound.assert_not_called()
+        self._ws.Beep.assert_not_called()
 
 
-class TestAudioManagerEnabled(unittest.TestCase):
-    """Core behaviour when audio_enabled is True."""
+# ---------------------------------------------------------------------------
+# Tests – per-flag guards (audio enabled, individual flag off)
+# ---------------------------------------------------------------------------
+
+class TestFlagGuards(unittest.TestCase):
 
     def setUp(self):
-        self._fake_ws = _make_fake_winsound()
-        self._fake_pyttsx3, self._tts_engine = _make_fake_pyttsx3()
-        sys.modules["winsound"] = self._fake_ws
-        sys.modules["pyttsx3"] = self._fake_pyttsx3
-        import importlib
-        import audio_manager
-        importlib.reload(audio_manager)
-        from audio_manager import AudioManager
-        self.AudioManager = AudioManager
+        self._ws = _make_fake_winsound()
+        self._am = _reload_audio(self._ws)
+        self.AudioManager = self._am.AudioManager
 
     def tearDown(self):
         sys.modules.pop("winsound", None)
-        sys.modules.pop("pyttsx3", None)
 
-    def _make(self, extra=None):
+    def _make(self, **flags):
         cfg = {"audio_enabled": True, "audio_volume": 0.8,
                "audio_voice_init": True, "audio_sound_activate": True,
-               "audio_sound_deactivate": True, "audio_sound_signal": False}
-        if extra:
-            cfg.update(extra)
+               "audio_sound_deactivate": True, "audio_sound_signal": True}
+        cfg.update(flags)
         return self.AudioManager(cfg)
 
     def _drain(self, mgr):
         mgr._executor.shutdown(wait=True)
 
-    # --- play_init ---
-
-    def test_play_init_calls_tts_when_enabled(self):
-        mgr = self._make()
+    def test_voice_init_flag_false(self):
+        mgr = self._make(audio_voice_init=False)
         mgr.play_init()
         self._drain(mgr)
-        self._fake_pyttsx3.init.assert_called_once()
-        self._tts_engine.say.assert_called_once_with(
-            "Vargo Dynamics Scanner online.")
-        self._tts_engine.runAndWait.assert_called_once()
+        self._ws.PlaySound.assert_not_called()
 
-    def test_play_init_skipped_when_voice_init_false(self):
-        mgr = self._make({"audio_voice_init": False})
-        mgr.play_init()
-        self._drain(mgr)
-        self._fake_pyttsx3.init.assert_not_called()
-
-    # --- play_activate ---
-
-    def test_play_activate_ascending_tones(self):
-        mgr = self._make()
+    def test_activate_flag_false(self):
+        mgr = self._make(audio_sound_activate=False)
         mgr.play_activate()
         self._drain(mgr)
-        calls = self._fake_ws.Beep.call_args_list
-        self.assertEqual(calls[0], call(800,  80))
-        self.assertEqual(calls[1], call(1200, 80))
+        self._ws.PlaySound.assert_not_called()
 
-    def test_play_activate_skipped_when_flag_false(self):
-        mgr = self._make({"audio_sound_activate": False})
-        mgr.play_activate()
+    def test_deactivate_flag_false(self):
+        mgr = self._make(audio_sound_deactivate=False)
+        mgr.play_deactivate()
         self._drain(mgr)
-        self._fake_ws.Beep.assert_not_called()
+        self._ws.PlaySound.assert_not_called()
 
-    # --- play_deactivate ---
+    def test_signal_flag_false_by_default(self):
+        mgr = self._make(audio_sound_signal=False)
+        mgr.play_signal("Taranite")
+        self._drain(mgr)
+        self._ws.PlaySound.assert_not_called()
 
-    def test_play_deactivate_descending_tones(self):
+    def test_signal_flag_true_triggers_play(self):
+        """When signal flag is explicitly True a sound attempt is made."""
+        fake_path = Path("/fake/sounds/signal.wav")
+        mgr = self._make(audio_sound_signal=True)
+        with patch.object(mgr, "_get_sound_path", return_value=fake_path):
+            mgr.play_signal("Taranite")
+            self._drain(mgr)
+        self._ws.PlaySound.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Tests – _play_wav with WAV file found
+# ---------------------------------------------------------------------------
+
+class TestPlayWavFound(unittest.TestCase):
+    """When a WAV file exists, PlaySound must be called with SND_FILENAME | SND_ASYNC."""
+
+    def setUp(self):
+        self._ws = _make_fake_winsound()
+        self._am = _reload_audio(self._ws)
+        self.AudioManager = self._am.AudioManager
+
+    def tearDown(self):
+        sys.modules.pop("winsound", None)
+
+    def _make(self, **extra):
+        cfg = {"audio_enabled": True, "audio_volume": 0.8,
+               "audio_voice_init": True, "audio_sound_activate": True,
+               "audio_sound_deactivate": True, "audio_sound_signal": True}
+        cfg.update(extra)
+        return self.AudioManager(cfg)
+
+    def _drain(self, mgr):
+        mgr._executor.shutdown(wait=True)
+
+    def test_play_wav_calls_playsound(self):
+        fake_path = Path("/fake/sounds/activate.wav")
         mgr = self._make()
-        mgr.play_deactivate()
-        self._drain(mgr)
-        calls = self._fake_ws.Beep.call_args_list
-        self.assertEqual(calls[0], call(1200, 80))
-        self.assertEqual(calls[1], call(800,  80))
+        with patch.object(mgr, "_get_sound_path", return_value=fake_path):
+            mgr._play_wav("activate")
+        expected_flags = self._ws.SND_FILENAME | self._ws.SND_ASYNC
+        self._ws.PlaySound.assert_called_once_with(str(fake_path), expected_flags)
 
-    def test_play_deactivate_skipped_when_flag_false(self):
-        mgr = self._make({"audio_sound_deactivate": False})
-        mgr.play_deactivate()
-        self._drain(mgr)
-        self._fake_ws.Beep.assert_not_called()
+    def test_snd_async_flag_is_set(self):
+        """SND_ASYNC must be present so PlaySound doesn't block the worker thread."""
+        fake_path = Path("/fake/sounds/init.wav")
+        mgr = self._make()
+        with patch.object(mgr, "_get_sound_path", return_value=fake_path):
+            mgr._play_wav("init")
+        _, flags = self._ws.PlaySound.call_args[0]
+        self.assertTrue(flags & self._ws.SND_ASYNC,
+                        "SND_ASYNC must be set for non-blocking playback")
 
-    # --- play_signal ---
+    def test_snd_filename_flag_is_set(self):
+        fake_path = Path("/fake/sounds/signal.wav")
+        mgr = self._make()
+        with patch.object(mgr, "_get_sound_path", return_value=fake_path):
+            mgr._play_wav("signal")
+        _, flags = self._ws.PlaySound.call_args[0]
+        self.assertTrue(flags & self._ws.SND_FILENAME)
 
-    def test_play_signal_no_beep_when_flag_false(self):
-        mgr = self._make({"audio_sound_signal": False})
-        mgr.play_signal("Taranite")
-        self._drain(mgr)
-        self._fake_ws.Beep.assert_not_called()
+    def test_play_activate_triggers_playsound_not_beep(self):
+        fake_path = Path("/fake/sounds/activate.wav")
+        mgr = self._make()
+        with patch.object(mgr, "_get_sound_path", return_value=fake_path):
+            mgr.play_activate()
+            self._drain(mgr)
+        self._ws.PlaySound.assert_called_once()
+        self._ws.Beep.assert_not_called()
 
-    def test_play_signal_beeps_when_flag_true(self):
-        mgr = self._make({"audio_sound_signal": True})
-        mgr.play_signal("Taranite")
-        self._drain(mgr)
-        self._fake_ws.Beep.assert_called_once_with(1000, 100)
+    def test_play_deactivate_triggers_playsound_not_beep(self):
+        fake_path = Path("/fake/sounds/deactivate.wav")
+        mgr = self._make()
+        with patch.object(mgr, "_get_sound_path", return_value=fake_path):
+            mgr.play_deactivate()
+            self._drain(mgr)
+        self._ws.PlaySound.assert_called_once()
+        self._ws.Beep.assert_not_called()
 
-    # --- set_volume ---
 
-    def test_set_volume_clamps_above_one(self):
+# ---------------------------------------------------------------------------
+# Tests – _play_wav with WAV file missing (Beep fallback)
+# ---------------------------------------------------------------------------
+
+class TestPlayWavMissing(unittest.TestCase):
+    """When no WAV file exists the method must fall back to a single Beep."""
+
+    def setUp(self):
+        self._ws = _make_fake_winsound()
+        self._am = _reload_audio(self._ws)
+        self.AudioManager = self._am.AudioManager
+
+    def tearDown(self):
+        sys.modules.pop("winsound", None)
+
+    def _make(self):
+        return self.AudioManager({"audio_enabled": True, "audio_volume": 0.8,
+                                   "audio_voice_init": True,
+                                   "audio_sound_activate": True,
+                                   "audio_sound_deactivate": True,
+                                   "audio_sound_signal": True})
+
+    def _drain(self, mgr):
+        mgr._executor.shutdown(wait=True)
+
+    def test_missing_wav_falls_back_to_beep(self):
+        mgr = self._make()
+        with patch.object(mgr, "_get_sound_path", return_value=None):
+            mgr._play_wav("activate")
+        self._ws.Beep.assert_called_once_with(1000, 100)
+        self._ws.PlaySound.assert_not_called()
+
+    def test_fallback_beep_called_exactly_once_per_missing_file(self):
+        mgr = self._make()
+        with patch.object(mgr, "_get_sound_path", return_value=None):
+            mgr._play_wav("init")
+            mgr._play_wav("activate")
+        self.assertEqual(self._ws.Beep.call_count, 2)
+
+    def test_play_init_falls_back_to_beep_when_no_wav(self):
+        mgr = self._make()
+        with patch.object(mgr, "_get_sound_path", return_value=None):
+            mgr.play_init()
+            self._drain(mgr)
+        self._ws.Beep.assert_called_once_with(1000, 100)
+
+
+# ---------------------------------------------------------------------------
+# Tests – _get_sound_path path resolution
+# ---------------------------------------------------------------------------
+
+class TestGetSoundPath(unittest.TestCase):
+
+    def setUp(self):
+        self._tmpdir   = tempfile.mkdtemp()
+        self._sounds   = os.path.join(self._tmpdir, "sounds")
+        os.makedirs(self._sounds)
+        self._am = _reload_audio()   # no winsound needed for path tests
+        self.AudioManager = self._am.AudioManager
+
+    def tearDown(self):
+        shutil.rmtree(self._tmpdir, ignore_errors=True)
+        sys.modules.pop("winsound", None)
+
+    def _make(self):
+        return self.AudioManager({"audio_enabled": True})
+
+    def _wav(self, name: str) -> str:
+        """Create a minimal placeholder WAV in the temp sounds dir."""
+        path = os.path.join(self._sounds, f"{name}.wav")
+        with open(path, "wb") as f:
+            f.write(b"RIFF")   # dummy content – not a real WAV header
+        return path
+
+    def test_returns_none_when_sounds_folder_empty(self):
+        mgr = self._make()
+        with patch.object(self._am, "_BASE_DIR", Path(self._tmpdir)):
+            result = mgr._get_sound_path("activate")
+        self.assertIsNone(result)
+
+    def test_returns_path_when_wav_exists(self):
+        self._wav("activate")
+        mgr = self._make()
+        with patch.object(self._am, "_BASE_DIR", Path(self._tmpdir)):
+            result = mgr._get_sound_path("activate")
+        self.assertIsNotNone(result)
+        self.assertEqual(result, Path(self._sounds) / "activate.wav")
+
+    def test_returns_none_for_different_name(self):
+        self._wav("activate")
+        mgr = self._make()
+        with patch.object(self._am, "_BASE_DIR", Path(self._tmpdir)):
+            result = mgr._get_sound_path("signal")
+        self.assertIsNone(result)
+
+    def test_meipass_takes_priority_over_base_dir(self):
+        """PyInstaller bundle path must be checked before BASE_DIR."""
+        # WAV only in meipass, not in BASE_DIR
+        meipass_sounds = os.path.join(self._tmpdir, "meipass", "sounds")
+        os.makedirs(meipass_sounds)
+        meipass_wav = os.path.join(meipass_sounds, "init.wav")
+        with open(meipass_wav, "wb") as f:
+            f.write(b"RIFF")
+        meipass_dir = os.path.join(self._tmpdir, "meipass")
+
+        mgr = self._make()
+        with patch.object(sys, "_MEIPASS", meipass_dir, create=True), \
+             patch.object(self._am, "_BASE_DIR", Path(self._tmpdir)):
+            result = mgr._get_sound_path("init")
+
+        self.assertEqual(result, Path(meipass_sounds) / "init.wav")
+
+    def test_falls_back_to_base_dir_when_no_meipass(self):
+        self._wav("deactivate")
+        mgr = self._make()
+        # No _MEIPASS attribute → fall through to BASE_DIR
+        with patch.object(self._am, "_BASE_DIR", Path(self._tmpdir)):
+            # Ensure _MEIPASS is not set on sys
+            if hasattr(sys, "_MEIPASS"):
+                with patch.object(sys, "_MEIPASS", None):
+                    result = mgr._get_sound_path("deactivate")
+            else:
+                result = mgr._get_sound_path("deactivate")
+
+        self.assertEqual(result, Path(self._sounds) / "deactivate.wav")
+
+
+# ---------------------------------------------------------------------------
+# Tests – set_volume
+# ---------------------------------------------------------------------------
+
+class TestSetVolume(unittest.TestCase):
+
+    def setUp(self):
+        self._am = _reload_audio()
+        self.AudioManager = self._am.AudioManager
+
+    def tearDown(self):
+        sys.modules.pop("winsound", None)
+
+    def _make(self):
+        return self.AudioManager({"audio_enabled": True, "audio_volume": 0.8})
+
+    def test_clamps_above_one(self):
         mgr = self._make()
         mgr.set_volume(1.5)
-        self._drain(mgr)
         self.assertAlmostEqual(mgr._config["audio_volume"], 1.0)
 
-    def test_set_volume_clamps_below_zero(self):
+    def test_clamps_below_zero(self):
         mgr = self._make()
         mgr.set_volume(-0.3)
-        self._drain(mgr)
         self.assertAlmostEqual(mgr._config["audio_volume"], 0.0)
 
-    def test_set_volume_stores_valid_value(self):
+    def test_stores_valid_value(self):
         mgr = self._make()
         mgr.set_volume(0.6)
-        self._drain(mgr)
         self.assertAlmostEqual(mgr._config["audio_volume"], 0.6)
 
-    # --- non-blocking ---
+    def test_boundary_zero(self):
+        mgr = self._make()
+        mgr.set_volume(0.0)
+        self.assertAlmostEqual(mgr._config["audio_volume"], 0.0)
 
-    def test_play_methods_return_immediately(self):
-        """All play methods must submit to executor and return without waiting."""
-        mgr = self._make({"audio_sound_signal": True, "audio_voice_init": False})
-        # Temporarily block the executor so work queues but doesn't run
-        barrier_done = False
+    def test_boundary_one(self):
+        mgr = self._make()
+        mgr.set_volume(1.0)
+        self.assertAlmostEqual(mgr._config["audio_volume"], 1.0)
 
+
+# ---------------------------------------------------------------------------
+# Tests – non-blocking guarantee
+# ---------------------------------------------------------------------------
+
+class TestNonBlocking(unittest.TestCase):
+
+    def setUp(self):
+        self._ws = _make_fake_winsound()
+        self._am = _reload_audio(self._ws)
+        self.AudioManager = self._am.AudioManager
+
+    def tearDown(self):
+        sys.modules.pop("winsound", None)
+
+    def test_play_methods_return_before_sound_finishes(self):
+        """All play methods must enqueue work and return without blocking."""
+        cfg = {"audio_enabled": True, "audio_volume": 0.8,
+               "audio_voice_init": True, "audio_sound_activate": True,
+               "audio_sound_deactivate": True, "audio_sound_signal": True}
+        mgr = self.AudioManager(cfg)
+        fake_path = Path("/fake/sounds/activate.wav")
+
+        # Block the worker thread for 300 ms
         def slow_task():
-            nonlocal barrier_done
             time.sleep(0.3)
-            barrier_done = True
 
         mgr._executor.submit(slow_task)
 
         t0 = time.monotonic()
-        mgr.play_activate()
-        mgr.play_deactivate()
-        mgr.play_signal("X")
+        with patch.object(mgr, "_get_sound_path", return_value=fake_path):
+            mgr.play_activate()
+            mgr.play_deactivate()
+            mgr.play_signal("X")
         elapsed = time.monotonic() - t0
-        # All three submissions must complete far faster than the 0.3 s blocker
-        self.assertLess(elapsed, 0.2)
-        self._drain(mgr)
 
-    # --- test_audio sequence ---
-
-    def test_test_audio_calls_all_sounds(self):
-        mgr = self._make({"audio_voice_init": True,
-                          "audio_sound_activate": True,
-                          "audio_sound_deactivate": True})
-        with patch("time.sleep"):   # skip the 0.5 s gaps
-            mgr.test_audio()
-            self._drain(mgr)
-
-        self._fake_pyttsx3.init.assert_called()
-        beep_calls = self._fake_ws.Beep.call_args_list
-        # activate: 800, 1200  |  deactivate: 1200, 800
-        self.assertIn(call(800,  80), beep_calls)
-        self.assertIn(call(1200, 80), beep_calls)
+        # Three submit() calls must complete long before the 300 ms blocker
+        self.assertLess(elapsed, 0.2,
+                        "play_* methods must not block waiting for the worker")
+        mgr._executor.shutdown(wait=True)
 
 
-class TestAudioManagerNoPyttsx3(unittest.TestCase):
-    """When pyttsx3 is not installed, TTS falls back to a beep and warns once."""
+# ---------------------------------------------------------------------------
+# Tests – test_audio sequence
+# ---------------------------------------------------------------------------
+
+class TestTestAudioSequence(unittest.TestCase):
 
     def setUp(self):
-        self._fake_ws = _make_fake_winsound()
-        sys.modules["winsound"] = self._fake_ws
-        # Ensure pyttsx3 is NOT available
-        sys.modules.pop("pyttsx3", None)
-        # Make importing pyttsx3 raise ImportError
-        blocker = types.ModuleType("pyttsx3")
-        blocker.__spec__ = None
-
-        import builtins
-        self._real_import = builtins.__import__
-
-        def _block_pyttsx3(name, *args, **kwargs):
-            if name == "pyttsx3":
-                raise ImportError("No module named 'pyttsx3'")
-            return self._real_import(name, *args, **kwargs)
-
-        builtins.__import__ = _block_pyttsx3
-        self._patched_import = _block_pyttsx3
-
-        import importlib
-        import audio_manager
-        importlib.reload(audio_manager)
-        from audio_manager import AudioManager
-        self.AudioManager = AudioManager
+        self._ws = _make_fake_winsound()
+        self._am = _reload_audio(self._ws)
+        self.AudioManager = self._am.AudioManager
 
     def tearDown(self):
-        import builtins
-        builtins.__import__ = self._real_import
         sys.modules.pop("winsound", None)
-        sys.modules.pop("pyttsx3", None)
 
-    def test_tts_falls_back_to_beep(self):
+    def test_test_audio_calls_all_three_sounds(self):
         cfg = {"audio_enabled": True, "audio_volume": 0.8,
-               "audio_voice_init": True}
+               "audio_voice_init": True, "audio_sound_activate": True,
+               "audio_sound_deactivate": True}
         mgr = self.AudioManager(cfg)
-        mgr.play_init()
-        mgr._executor.shutdown(wait=True)
-        self._fake_ws.Beep.assert_called_once_with(1000, 120)
+
+        with patch.object(mgr, "_play_wav") as mock_play, \
+             patch("audio_manager.time.sleep"):
+            mgr.test_audio()
+            mgr._executor.shutdown(wait=True)
+
+        self.assertEqual(mock_play.call_count, 3)
+        mock_play.assert_any_call("init")
+        mock_play.assert_any_call("activate")
+        mock_play.assert_any_call("deactivate")
+
+    def test_test_audio_plays_in_correct_order(self):
+        cfg = {"audio_enabled": True, "audio_volume": 0.8,
+               "audio_voice_init": True, "audio_sound_activate": True,
+               "audio_sound_deactivate": True}
+        mgr = self.AudioManager(cfg)
+
+        with patch.object(mgr, "_play_wav") as mock_play, \
+             patch("audio_manager.time.sleep"):
+            mgr.test_audio()
+            mgr._executor.shutdown(wait=True)
+
+        names = [c.args[0] for c in mock_play.call_args_list]
+        self.assertEqual(names, ["init", "activate", "deactivate"])
 
 
-class TestAudioManagerNoWinsound(unittest.TestCase):
-    """On non-Windows (no winsound), beep methods must not raise."""
+# ---------------------------------------------------------------------------
+# Tests – no winsound available (non-Windows)
+# ---------------------------------------------------------------------------
+
+class TestNoWinsound(unittest.TestCase):
+    """When winsound is not importable, play methods must not raise."""
 
     def setUp(self):
         sys.modules.pop("winsound", None)
-        # Block winsound import
         import builtins
         self._real_import = builtins.__import__
 
@@ -301,28 +496,31 @@ class TestAudioManagerNoWinsound(unittest.TestCase):
             return self._real_import(name, *args, **kwargs)
 
         builtins.__import__ = _block_ws
-        self._patched_import = _block_ws
-
-        import importlib
-        import audio_manager
-        importlib.reload(audio_manager)
-        from audio_manager import AudioManager
-        self.AudioManager = AudioManager
+        self._am = _reload_audio()
+        self.AudioManager = self._am.AudioManager
 
     def tearDown(self):
         import builtins
         builtins.__import__ = self._real_import
         sys.modules.pop("winsound", None)
 
-    def test_play_activate_no_exception_without_winsound(self):
-        cfg = {"audio_enabled": True, "audio_volume": 0.8,
-               "audio_sound_activate": True}
-        mgr = self.AudioManager(cfg)
+    def test_play_activate_no_exception(self):
+        mgr = self.AudioManager({"audio_enabled": True,
+                                   "audio_sound_activate": True})
         try:
             mgr.play_activate()
             mgr._executor.shutdown(wait=True)
         except Exception as e:
             self.fail(f"play_activate() raised unexpectedly: {e}")
+
+    def test_play_init_no_exception(self):
+        mgr = self.AudioManager({"audio_enabled": True,
+                                   "audio_voice_init": True})
+        try:
+            mgr.play_init()
+            mgr._executor.shutdown(wait=True)
+        except Exception as e:
+            self.fail(f"play_init() raised unexpectedly: {e}")
 
 
 if __name__ == "__main__":

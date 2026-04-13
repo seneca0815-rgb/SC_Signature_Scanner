@@ -372,6 +372,12 @@ class SetupWizard:
         tk.Label(row2, text="%", bg=C_BG, fg=C_MUTED,
                  font=("Consolas", 10)).pack(side="left", padx=(4, 0))
 
+        tk.Label(f,
+                 text="Use the Windows volume mixer to adjust playback level.",
+                 bg=C_BG, fg=C_MUTED,
+                 font=("Consolas", 9), justify="left").pack(
+                     anchor="w", pady=(0, 6))
+
         # Row 3 – Individual sound toggles
         checks = [
             ("Startup announcement",  self._audio_init_var),
@@ -407,6 +413,17 @@ class SetupWizard:
         ).pack(side="left")
 
     def _on_test_audio(self):
+        # Check if WAV files are present and inform the user
+        sounds_dir = BASE_DIR / "sounds"
+        has_wavs   = sounds_dir.is_dir() and any(sounds_dir.glob("*.wav"))
+
+        if not has_wavs and hasattr(self, "_test_msg_lbl"):
+            self._test_msg_lbl.config(
+                text="No WAV files found in sounds\\ – using beep fallback")
+            self.root.after(
+                3000, lambda: self._test_msg_lbl.config(text=""))
+
+        # Play audio regardless; AudioManager falls back to beep when no WAVs
         if self._audio_manager is not None:
             self._audio_manager.test_audio()
         else:
@@ -422,9 +439,7 @@ class SetupWizard:
                 }
                 AudioManager(cfg).test_audio()
             except Exception:
-                if hasattr(self, "_test_msg_lbl"):
-                    self._test_msg_lbl.config(
-                        text="Install pyttsx3 for voice output")
+                pass
 
     def _page_hotkey(self):
         f = self._frame
