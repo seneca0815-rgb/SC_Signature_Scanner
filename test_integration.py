@@ -221,9 +221,9 @@ class TestInstallerManifest(unittest.TestCase):
     # Path prefixes for binary build artifacts (dist\, redist\)
     SKIP_PREFIXES = {"dist\\", "redist\\"}
 
-    def _parse_source_files(self) -> list[Path]:
-        """Extract Source: paths from the [Files] section of the .iss script."""
-        sources = []
+    def _parse_source_entries(self) -> list[tuple[str, str]]:
+        """Extract (source_path, flags) pairs from the [Files] section."""
+        entries = []
         in_files = False
         for line in self.ISS_PATH.read_text(encoding="utf-8").splitlines():
             stripped = line.strip()
@@ -235,21 +235,34 @@ class TestInstallerManifest(unittest.TestCase):
             if in_files:
                 m = re.search(r'Source:\s*"([^"]+)"', stripped)
                 if m:
-                    sources.append(m.group(1))
-        return sources
+                    flags_m = re.search(r'Flags:\s*(\S+)', stripped)
+                    flags = flags_m.group(1) if flags_m else ""
+                    entries.append((m.group(1), flags))
+        return entries
+
+    def _parse_source_files(self) -> list[str]:
+        """Extract Source: paths from the [Files] section of the .iss script."""
+        return [src for src, _ in self._parse_source_entries()]
 
     def test_iss_file_exists(self):
         self.assertTrue(self.ISS_PATH.exists(),
                         "SCSigReader.iss must exist at project root")
 
     def test_all_non_build_source_files_exist(self):
-        """Every source file that isn't a build artifact must be present."""
-        sources = self._parse_source_files()
-        self.assertGreater(len(sources), 0,
+        """Every source file that isn't a build artifact must be present.
+
+        Files with skipifsourcenotexists in their Flags are optional —
+        they are user-supplied assets (e.g. sounds/*.wav) that are absent
+        in a clean CI checkout but handled gracefully by the installer.
+        """
+        entries = self._parse_source_entries()
+        self.assertGreater(len(entries), 0,
                            "No source files found in .iss — check parsing")
-        for src in sources:
+        for src, flags in entries:
             if src in self.SKIP_FILES or any(src.startswith(p) for p in self.SKIP_PREFIXES):
                 continue
+            if "skipifsourcenotexists" in flags:
+                continue          # optional asset — absence is expected in CI
             path = PROJECT_ROOT / src
             with self.subTest(file=src):
                 self.assertTrue(path.exists(),
