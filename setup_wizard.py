@@ -95,7 +95,7 @@ class SetupWizard:
     def __init__(self, audio_manager=None):
         self.root = tk.Tk()
         self.root.title("SC Signature Reader – Setup")
-        self.root.geometry("620x520")
+        self.root.geometry("620x600")
         self.root.resizable(False, False)
         self.root.configure(bg=C_BG)
         self.root.eval("tk::PlaceWindow . center")
