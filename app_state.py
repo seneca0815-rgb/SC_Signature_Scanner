@@ -38,6 +38,10 @@ class AppState:
         self._last_signal   = ""           # last recognised text
         self._recent        = deque(maxlen=MAX_RECENT)
 
+        # Performance tracking
+        self._cycle_times   = deque(maxlen=10)
+        self._last_cycle_ms = 0.0
+
         # Config
         self.interval       = config.get("interval_ms", 500) / 1000
         self._active_theme  = config.get("theme", "vargo")
@@ -83,6 +87,26 @@ class AppState:
                 self._recent.append(text)
         log.debug("Signal set: '%s'", text)
         self._notify()
+
+    # ------------------------------------------------------------------
+    # Performance
+    # ------------------------------------------------------------------
+
+    @property
+    def last_cycle_ms(self) -> float:
+        return self._last_cycle_ms
+
+    @property
+    def avg_cycle_ms(self) -> float:
+        with self._lock:
+            if not self._cycle_times:
+                return 0.0
+            return sum(self._cycle_times) / len(self._cycle_times)
+
+    def record_cycle_time(self, ms: float):
+        with self._lock:
+            self._last_cycle_ms = ms
+            self._cycle_times.append(ms)
 
     # ------------------------------------------------------------------
     # Theme

@@ -310,18 +310,33 @@ def lookup_text(raw: str) -> str | None:
 # Schritt 4: Scan-Loop mit Voting
 # ---------------------------------------------------------------------------
 
-def scan_once(sct=None) -> list[tuple[str, str]]:
+def scan_once(sct=None, state=None) -> list[tuple[str, str]]:
     """
     Ein Scan-Durchlauf.
     Gibt Liste von (erkannte_zahl, lookup_ergebnis) zurück.
+
+    Wenn state übergeben wird, werden Cycle-Zeiten in AppState aufgezeichnet.
     """
-    bgr     = capture_roi(sct)
+    t_total = time.perf_counter()
+
+    t0  = time.perf_counter()
+    bgr = capture_roi(sct)
+    t_grab = (time.perf_counter() - t0) * 1000
+
+    t0      = time.perf_counter()
     regions = find_orange_regions(bgr)
-    hits    = []
+    t_find  = (time.perf_counter() - t0) * 1000
+
+    hits          = []
+    t_ocr_total    = 0.0
+    t_lookup_total = 0.0
 
     for region in regions:
-        pil  = region_to_pil(bgr, region)
+        pil = region_to_pil(bgr, region)
+
+        t0   = time.perf_counter()
         text = ocr_text(pil)
+        t_ocr_total += (time.perf_counter() - t0) * 1000
 
         if MIN_DIGITS <= len(text) <= MAX_DIGITS + 1:
             # Clean single number from digit-only OCR
@@ -331,23 +346,43 @@ def scan_once(sct=None) -> list[tuple[str, str]]:
             # Try two fallback modes and merge: psm 6 (block) on preprocessed
             # image handles multi-number panels; psm 7 on the raw image works
             # well for wider, lower-contrast labels.
+            t0       = time.perf_counter()
             raw_pre  = pytesseract.image_to_string(
                 preprocess(pil), config=r"--psm 6"
             ).strip()
             raw_orig = pytesseract.image_to_string(
                 pil, config=r"--psm 7"
             ).strip()
+            t_ocr_total += (time.perf_counter() - t0) * 1000
             candidates = _extract_numbers(raw_pre + " " + raw_orig)
 
         for candidate in candidates:
             if not (MIN_DIGITS <= len(candidate) <= MAX_DIGITS + 1):
                 continue
+            t0     = time.perf_counter()
             result = lookup_text(candidate)
+            t_lookup_total += (time.perf_counter() - t0) * 1000
             log.debug("OCR raw='%s' -> %s", candidate, result)
             if result:
                 hits.append((candidate, result))
 
-    log.debug("Regions found: %d", len(regions))
+    total_ms = (time.perf_counter() - t_total) * 1000
+
+    log.debug(
+        "Timing: grab=%.1fms find=%.1fms ocr=%.1fms lookup=%.1fms total=%.1fms regions=%d",
+        t_grab, t_find, t_ocr_total, t_lookup_total, total_ms, len(regions),
+    )
+
+    if total_ms > 1000:
+        phases  = {"grab": t_grab, "find": t_find, "ocr": t_ocr_total, "lookup": t_lookup_total}
+        slowest = max(phases, key=phases.get)
+        log.warning(
+            "Slow cycle: total=%.0fms -- slowest phase: %s (%.0fms)",
+            total_ms, slowest, phases[slowest],
+        )
+
+    if state is not None:
+        state.record_cycle_time(total_ms)
 
     global _empty_scan_count
     if hits:
