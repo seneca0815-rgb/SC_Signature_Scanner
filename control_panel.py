@@ -57,23 +57,22 @@ class ControlPanel:
         self._minimised = False
         self._show_perf = config.get("log_level", "INFO").upper() == "DEBUG"
 
-        win_height = 740 if self._show_perf else 660
         self._win = tk.Toplevel(root)
         self._win.title("Vargo Dynamics  ·  SC Signature Reader")
         self._win.configure(bg=C_BG)
         self._win.resizable(False, False)
-        self._win.geometry(f"340x{win_height}")
         self._win.protocol("WM_DELETE_WINDOW", self._on_close)
 
-        # Centre on screen
+        self._build_ui()
+
+        # Auto-size height to content, then centre on screen
         self._win.update_idletasks()
+        win_height = self._win.winfo_reqheight()
         sw = self._win.winfo_screenwidth()
         sh = self._win.winfo_screenheight()
         x  = (sw - 340) // 2
-        y  = (sh - win_height) // 2
+        y  = max(0, (sh - win_height) // 2)
         self._win.geometry(f"340x{win_height}+{x}+{y}")
-
-        self._build_ui()
 
         # Register for state changes
         state.register_callback(self._on_state_change)
