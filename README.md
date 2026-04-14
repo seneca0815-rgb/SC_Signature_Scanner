@@ -1,4 +1,4 @@
-# SC Overlay
+# SC Signature Reader
 
 A transparent always-on-top overlay for Star Citizen.  
 Automatically detects mining signature numbers in the HUD and displays  
@@ -104,7 +104,8 @@ pip install mss pillow pytesseract opencv-python numpy
 
 ### 3. Run
 ```bash
-python overlay.py
+python main.py           # normal start
+python main.py --setup   # run setup wizard first
 ```
 
 ---
@@ -120,12 +121,18 @@ python overlay.py
 | `aspect_min` | Minimum width/height ratio | `2.0` |
 | `aspect_max` | Maximum width/height ratio | `6.0` |
 | `region_padding` | Pixel padding around detected region | `8` |
+| `max_regions` | Max orange regions to OCR per cycle (largest first) | `3` |
 | `vote_frames` | Number of frames for majority vote | `3` |
 | `interval_ms` | Scan frequency in milliseconds | `500` |
 | `fuzzy_max_distance` | Max Levenshtein distance (0 = disabled) | `1` |
 | `tesseract_cmd` | Path to Tesseract executable | `tesseract` |
+| `theme` | UI colour theme | `vargo` |
+| `hotkey` | Pause/resume shortcut | `scroll lock` |
+| `log_level` | Log verbosity: `DEBUG`, `INFO`, `WARNING`, `ERROR` | `INFO` |
 | `overlay_x/y` | Overlay window position | `30/30` |
 | `alpha` | Overlay transparency (0–1) | `0.88` |
+| `audio_enabled` | Enable audio feedback | `true` |
+| `audio_volume` | Master volume (0.0–1.0) | `0.5` |
 
 ### Recommended values for 2560×1440
 
@@ -200,20 +207,30 @@ Collisions (same signature value, different minerals) are joined with ` / `:
 
 ```
 sc_signature_reader/
-├── overlay.py                  ← main program, OCR pipeline, lookup logic
-├── themes.py                   ← overlay colour themes
+├── main.py                     ← entry point, threads, hotkey
+├── overlay.py                  ← OCR pipeline, lookup logic, scan loop
+├── app_state.py                ← shared thread-safe state
+├── control_panel.py            ← main UI window (Vargo Dynamics branded)
+├── overlay_window.py           ← transparent always-on-top result window
+├── display_window.py           ← optional cockpit display (VD-SFR1)
 ├── setup_wizard.py             ← first-run configuration wizard
+├── tray_icon.py                ← system tray integration
+├── audio_manager.py            ← WAV audio feedback
+├── logger_setup.py             ← structured logging (RotatingFileHandler)
+├── themes.py                   ← 5 built-in colour themes
 ├── lookup.json                 ← 163 signature values
 ├── config.example.json         ← config template (copy to config.json)
 ├── requirements.txt            ← Python runtime dependencies
 ├── SCSigReader.iss             ← Inno Setup installer script
-├── test_core.py                ← unit tests (81 tests)
-├── test_setup_wizard.py        ← wizard acceptance tests (20 tests)
-├── test_integration.py         ← integration tests (25 tests)
+├── test_core.py                ← unit tests
+├── test_setup_wizard.py        ← wizard acceptance tests
+├── test_integration.py         ← integration tests
+├── test_ui_acceptance.py       ← UI acceptance tests
 ├── test_ocr.py                 ← OCR debugging helper
 ├── find_roi.py                 ← scan region calibration helper
 ├── debug_script.py             ← screenshot region analysis
 ├── generate_theme_preview.py   ← renders theme_preview.png
+├── sounds/                     ← WAV files for audio feedback
 ├── .github/workflows/
 │   ├── ci.yml                  ← run tests on push/PR
 │   └── release.yml             ← build installer on version tag
@@ -234,11 +251,38 @@ See [DISCLAIMER.md](DISCLAIMER.md) for the full disclaimer.
 
 ---
 
+## Debug logging
+
+Set `log_level` to `"DEBUG"` in `config.json` to enable verbose output:
+
+```json
+"log_level": "DEBUG"
+```
+
+**What DEBUG mode adds:**
+
+- Per-cycle timing breakdown: `grab / find / ocr / lookup` phases in ms
+- A `WARNING` when total cycle time exceeds 1000 ms, naming the slowest phase
+- A **PERFORMANCE** section in the Control Panel showing average and last cycle time (updated every 5 s)
+- Raw OCR output and lookup results for every detected region
+
+**Log file location:**
+
+```
+%APPDATA%\VargoDynamics\SCSigReader\logs\scsigread.log
+```
+
+The **LOG** button in the Control Panel opens this folder directly.
+
+> Tip: switch back to `"INFO"` for normal use — DEBUG generates one log line per scan cycle and will fill the log file quickly.
+
+---
+
 ## Troubleshooting
 
 **Overlay does not appear**  
-→ Check terminal output: do `[OCR]` lines show values?  
-→ Run `test_ocr.py` and inspect `2_preprocessed.png`  
+→ Enable `"log_level": "DEBUG"` and check the log file for OCR output  
+→ Run `test_ocr.py` and inspect `2_preprocessed.png` to see what Tesseract receives  
 
 **Wrong matches / flickering**  
 → Increase `vote_frames` (e.g. `5`)  
@@ -246,8 +290,14 @@ See [DISCLAIMER.md](DISCLAIMER.md) for the full disclaimer.
 → Use stricter `min_area` and `aspect_min/max` values  
 
 **OCR detects nothing**  
-→ Run `calibrate_hsv.py` to recalibrate the HSV range  
-→ Adjust threshold in `preprocess()` (default: `> 80`)  
+→ Enable DEBUG logging and check if regions are found (`regions=X/Y` in timing lines)  
+→ If `regions=0/0` every cycle: widen `scan_region` or loosen `hsv_low/high`  
+→ Run `test_ocr.py` to inspect the preprocessed image  
+
+**Slow scan cycles (> 1000 ms)**  
+→ Enable DEBUG logging — the PERFORMANCE panel shows avg/last cycle time  
+→ Reduce `max_regions` (e.g. `2`) to limit Tesseract calls per cycle  
+→ Check `regions=X/Y`: if X is always at the cap, many false orange regions exist — tighten `scan_region`  
 
 **Different resolution or FOV**  
 → Adjust `scan_region` (see reference table above)  
