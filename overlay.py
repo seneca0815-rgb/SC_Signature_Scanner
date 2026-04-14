@@ -68,6 +68,8 @@ _HSV_HIGH2: np.ndarray | None = None
 _MIN_AREA  = 200   # minimum area for primary (orange) range
 _MIN_AREA2 = 200   # minimum area for secondary (cyan) range — lower to catch sparse text
 _PADDING   = 6
+_LUM_THRESHOLD = 150   # luminance threshold for white/near-white text pass
+_LUM_ENABLED   = False # disabled by default — no confirmed white-signature ship yet
 
 _empty_scan_count: int = 0   # consecutive empty-OCR counter
 
@@ -76,6 +78,7 @@ def init(config_path: Path, lookup_path: Path) -> None:
     """Load config and lookup, apply theme, initialise all module globals."""
     global config, lookup, ROI, INTERVAL, CONFIDENCE, FUZZY_MAX_DIST
     global _HSV_LOW, _HSV_HIGH, _HSV_LOW2, _HSV_HIGH2, _MIN_AREA, _MIN_AREA2, _PADDING
+    global _LUM_THRESHOLD, _LUM_ENABLED
 
     log.debug("overlay.init() called with config path: %s", config_path)
 
@@ -109,6 +112,8 @@ def init(config_path: Path, lookup_path: Path) -> None:
     _MIN_AREA  = config.get("min_area",  200)
     _MIN_AREA2 = config.get("min_area2", 200)
     _PADDING   = config.get("region_padding", 6)
+    _LUM_THRESHOLD = config.get("luminance_threshold", 150)
+    _LUM_ENABLED   = config.get("luminance_enabled", False)
 
 
 # ---------------------------------------------------------------------------
@@ -138,13 +143,11 @@ def find_orange_regions(bgr: np.ndarray) -> list[tuple[int,int,int,int,str]]:
     """
     Detect coloured signature regions in *bgr*.
 
-    Returns a list of (x, y, w, h, color_hint) tuples where color_hint is
-    ``"orange"`` or ``"cyan"``.  The hint is determined by whichever HSV
-    range contributes the most masked pixels inside the bounding rectangle.
-
-    A second HSV range (``_HSV_LOW2`` / ``_HSV_HIGH2``) is ORed in when
-    configured, enabling detection of Aegis-style cyan signatures alongside
-    the standard orange ones.
+    Returns a list of (x, y, w, h, color_hint) tuples.  color_hint is one of:
+      ``"orange"`` — primary HSV range (Drake, RSI, …)
+      ``"cyan"``   — secondary HSV range (Aegis, …)
+      ``"white"``  — luminance pass for near-white / low-saturation text
+                     (Anvil and similar manufacturers)
     """
     hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
 
@@ -184,6 +187,16 @@ def find_orange_regions(bgr: np.ndarray) -> list[tuple[int,int,int,int,str]]:
         mask_cyan  = cv2.morphologyEx(mask_cyan, cv2.MORPH_CLOSE, kernel_20x5)
         regions   += _contours_to_regions(mask_cyan, _MIN_AREA2, "cyan")
 
+    # Tertiary pass (white / near-white) — luminance threshold for
+    # manufacturers that render HUD text in white or low-saturation tones
+    # (e.g. Anvil Aerospace).  Uses greyscale brightness instead of a
+    # colour-channel formula so no HSV tuning is required.
+    if _LUM_ENABLED:
+        gray        = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+        _, mask_lum = cv2.threshold(gray, _LUM_THRESHOLD, 255, cv2.THRESH_BINARY)
+        mask_lum    = cv2.morphologyEx(mask_lum, cv2.MORPH_CLOSE, kernel_3x3)
+        regions    += _contours_to_regions(mask_lum, _MIN_AREA, "white")
+
     return regions
 
 # ---------------------------------------------------------------------------
@@ -211,9 +224,11 @@ def preprocess(img: Image.Image, threshold: int = 80,
     The `threshold` parameter (default 80) is exposed so that ocr_text()
     can call preprocess() multiple times with different thresholds.
 
-    `color_hint` selects the channel-isolation formula:
+    `color_hint` selects the preprocessing formula:
       "orange" → R+G−B  (isolates orange: high R and G, low B)
       "cyan"   → G+B−R  (isolates cyan:   high G and B, low R)
+      "white"  → greyscale + contrast + threshold (no channel arithmetic
+                 needed — the text is already near-neutral)
     Any other value falls back to "orange".
     """
     TARGET_HEIGHT = 60
@@ -221,8 +236,20 @@ def preprocess(img: Image.Image, threshold: int = 80,
     scale = max(1.0, TARGET_HEIGHT / max(h, 1))
     img   = img.resize((round(w * scale), round(h * scale)), Image.LANCZOS)
 
-    import PIL.ImageChops as chops
     from PIL import ImageEnhance
+
+    if color_hint == "white":
+        # Near-white / low-saturation text: convert to greyscale and boost
+        # contrast so digit strokes stand out against a darker background.
+        # The threshold parameter is reused here as the grey cutoff level.
+        channel = img.convert("L")
+        channel = ImageEnhance.Contrast(channel).enhance(3.0)
+        channel = channel.point(lambda p: 255 if p > threshold else 0)
+        channel = ImageOps.invert(channel)
+        channel = channel.filter(ImageFilter.SHARPEN)
+        return channel
+
+    import PIL.ImageChops as chops
     r, g, b = img.split()
 
     if color_hint == "cyan":
@@ -383,8 +410,10 @@ def scan_once(sct=None, state=None) -> list[tuple[str, str]]:
     # non-Aegis ships identical to pre-1.2.3 behaviour (they rarely have
     # cyan false positives in the scan region).
     max_regions  = config.get("max_regions",  3)
-    max_regions2 = config.get("max_regions2", 3)    # cyan cap
+    max_regions2 = config.get("max_regions2", 5)    # cyan cap — higher to survive cockpit false positives
+    max_regions3 = config.get("max_regions3", 3)    # white cap
     max_area2    = config.get("max_area2", 5000)    # reject huge cyan blobs (HUD panels)
+    max_area3    = config.get("max_area3", 5000)    # reject huge white blobs
     n_found      = len(regions)
 
     orange_regions = sorted(
@@ -400,8 +429,13 @@ def scan_once(sct=None, state=None) -> list[tuple[str, str]]:
         key=lambda r: r[2] * r[3], reverse=True
     )[:max_regions2]
 
-    # Orange first; if no hit, fall through to cyan.
-    regions = orange_regions + cyan_regions
+    white_regions = sorted(
+        [r for r in regions if r[4] == "white" and r[2] * r[3] <= max_area3],
+        key=lambda r: r[2] * r[3], reverse=True
+    )[:max_regions3]
+
+    # Orange → cyan → white; break on first lookup hit.
+    regions = orange_regions + cyan_regions + white_regions
 
     hits          = []
     t_ocr_total    = 0.0
@@ -455,10 +489,10 @@ def scan_once(sct=None, state=None) -> list[tuple[str, str]]:
 
     log.debug(
         "Timing: grab=%.1fms find=%.1fms ocr=%.1fms lookup=%.1fms total=%.1fms "
-        "regions=%d/%d (o=%d c=%d)",
+        "regions=%d/%d (orange=%d cyan=%d white=%d)",
         t_grab, t_find, t_ocr_total, t_lookup_total, total_ms,
-        len(orange_regions) + len(cyan_regions), n_found,
-        len(orange_regions), len(cyan_regions),
+        len(orange_regions) + len(cyan_regions) + len(white_regions), n_found,
+        len(orange_regions), len(cyan_regions), len(white_regions),
     )
 
     if total_ms > 1000:
