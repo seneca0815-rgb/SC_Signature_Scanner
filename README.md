@@ -196,9 +196,10 @@ Collisions (same signature value, different minerals) are joined with ` / `:
 
 | Script | Purpose |
 |---|---|
-| `test_ocr.py` | Saves `1_original.png` + `2_preprocessed.png` – shows what Tesseract actually sees |
-| `find_roi.py` | Helps locate and calibrate the scan region on screen |
-| `debug_script.py` | Analyses saved screenshots for detected regions |
+| `calibrate_hsv.py` | Click on a signature pixel in a screenshot (or live capture) to get exact HSV values and suggested `hsv_low` / `hsv_high` config |
+| `find_roi.py` | Shows live mouse coordinates — helps locate the scan region |
+| `test_ocr.py` | Saves `1_original.png` + `2_preprocessed.png` — shows what Tesseract actually sees |
+| `debug_script.py` | Analyses saved screenshots for detected orange regions |
 | `generate_theme_preview.py` | Renders `theme_preview.png` from `themes.py` |
 
 ---
@@ -227,7 +228,8 @@ sc_signature_reader/
 ├── test_integration.py         ← integration tests
 ├── test_ui_acceptance.py       ← UI acceptance tests
 ├── test_ocr.py                 ← OCR debugging helper
-├── find_roi.py                 ← scan region calibration helper
+├── calibrate_hsv.py            ← click-to-calibrate HSV range helper
+├── find_roi.py                 ← live mouse position helper for scan region
 ├── debug_script.py             ← screenshot region analysis
 ├── generate_theme_preview.py   ← renders theme_preview.png
 ├── sounds/                     ← WAV files for audio feedback
@@ -291,7 +293,7 @@ The **LOG** button in the Control Panel opens this folder directly.
 
 **OCR detects nothing**  
 → Enable DEBUG logging and check if regions are found (`regions=X/Y` in timing lines)  
-→ If `regions=0/0` every cycle: widen `scan_region` or loosen `hsv_low/high`  
+→ If `regions=0/0` every cycle: run `calibrate_hsv.py` to get the correct HSV values for your screen  
 → Run `test_ocr.py` to inspect the preprocessed image  
 
 **Slow scan cycles (> 1000 ms)**  
