@@ -67,7 +67,7 @@ def _build_scan_loop(state: AppState, audio: "AudioManager"):
                     time.sleep(0.2)
                     continue
 
-                hits   = ov.scan_once()
+                hits   = ov.scan_once(state=state)
                 result = hits[0][1] if hits else ""
 
                 if result != last_key:

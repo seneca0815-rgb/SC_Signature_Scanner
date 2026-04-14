@@ -55,26 +55,32 @@ class ControlPanel:
         self._log_dir   = log_dir
         self._themes    = _load_themes(base_dir)
         self._minimised = False
+        self._show_perf = config.get("log_level", "INFO").upper() == "DEBUG"
 
         self._win = tk.Toplevel(root)
         self._win.title("Vargo Dynamics  ·  SC Signature Reader")
         self._win.configure(bg=C_BG)
         self._win.resizable(False, False)
-        self._win.geometry("340x660")
         self._win.protocol("WM_DELETE_WINDOW", self._on_close)
-
-        # Centre on screen
-        self._win.update_idletasks()
-        sw = self._win.winfo_screenwidth()
-        sh = self._win.winfo_screenheight()
-        x  = (sw - 340) // 2
-        y  = (sh - 660) // 2
-        self._win.geometry(f"340x660+{x}+{y}")
 
         self._build_ui()
 
+        # Auto-size height to content, then centre on screen
+        self._win.update_idletasks()
+        win_height = self._win.winfo_reqheight()
+        sw = self._win.winfo_screenwidth()
+        sh = self._win.winfo_screenheight()
+        x  = (sw - 340) // 2
+        y  = max(0, (sh - win_height) // 2)
+        self._win.geometry(f"340x{win_height}+{x}+{y}")
+
         # Register for state changes
         state.register_callback(self._on_state_change)
+
+        # Start performance polling if DEBUG mode
+        if self._show_perf:
+            self._root.after(5000, self._refresh_perf)
+
         log.info("Control panel initialised")
 
     # ------------------------------------------------------------------
@@ -295,6 +301,33 @@ class ControlPanel:
 
         self._build_divider(w)
 
+        # ── Performance (DEBUG only) ─────────────────────────────────────
+        if self._show_perf:
+            self._build_section(w, "PERFORMANCE")
+
+            perf_frame = tk.Frame(w, bg=C_SURFACE,
+                                  highlightbackground=C_BORDER,
+                                  highlightthickness=1)
+            perf_frame.pack(fill="x", padx=16, pady=(0, 4))
+
+            self._perf_avg_lbl = tk.Label(
+                perf_frame,
+                text="avg cycle:   – ms",
+                bg=C_SURFACE, fg=C_MUTED,
+                font=("Courier New", 10),
+                padx=12, pady=4, anchor="w")
+            self._perf_avg_lbl.pack(fill="x")
+
+            self._perf_last_lbl = tk.Label(
+                perf_frame,
+                text="last cycle:  – ms",
+                bg=C_SURFACE, fg=C_MUTED,
+                font=("Courier New", 10),
+                padx=12, pady=4, anchor="w")
+            self._perf_last_lbl.pack(fill="x")
+
+            self._build_divider(w)
+
         # ── Buttons ──────────────────────────────────────────────────────
         btn_row = tk.Frame(w, bg=C_BG)
         btn_row.pack(fill="x", padx=16, pady=12)
@@ -346,6 +379,22 @@ class ControlPanel:
 
     def _on_signal_sound_toggle(self):
         self._config["audio_sound_signal"] = bool(self._signal_sound_var.get())
+
+    def _refresh_perf(self):
+        """Update performance labels every 5 s (DEBUG mode only)."""
+        if not self._show_perf:
+            return
+        avg  = self._state.avg_cycle_ms
+        last = self._state.last_cycle_ms
+        avg_color  = C_RED if avg  > 1000 else C_MUTED
+        last_color = C_RED if last > 1000 else C_MUTED
+        self._perf_avg_lbl.config(
+            text=f"avg cycle:   {avg:.0f} ms  (last 10)",
+            fg=avg_color)
+        self._perf_last_lbl.config(
+            text=f"last cycle:  {last:.0f} ms",
+            fg=last_color)
+        self._root.after(5000, self._refresh_perf)
 
     def _build_section(self, parent, title: str):
         row = tk.Frame(parent, bg=C_BG)
