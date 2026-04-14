@@ -347,11 +347,10 @@ def scan_once(sct=None, state=None) -> list[tuple[str, str]]:
         if MIN_DIGITS <= len(text) <= MAX_DIGITS + 1:
             # Clean single number from digit-only OCR
             candidates = [text]
-        else:
-            # Digit-only pass failed or returned too many digits.
-            # Try two fallback modes and merge: psm 6 (block) on preprocessed
-            # image handles multi-number panels; psm 7 on the raw image works
-            # well for wider, lower-contrast labels.
+        elif text:
+            # Got digits but wrong length — try wider OCR modes as fallback.
+            # psm 6 (block) on preprocessed handles multi-number panels;
+            # psm 7 on the raw image works for wider, lower-contrast labels.
             t0       = time.perf_counter()
             raw_pre  = pytesseract.image_to_string(
                 preprocess(pil), config=r"--psm 6"
@@ -361,6 +360,9 @@ def scan_once(sct=None, state=None) -> list[tuple[str, str]]:
             ).strip()
             t_ocr_total += (time.perf_counter() - t0) * 1000
             candidates = _extract_numbers(raw_pre + " " + raw_orig)
+        else:
+            # ocr_text() found nothing at all — skip fallback, region is empty.
+            candidates = []
 
         for candidate in candidates:
             if not (MIN_DIGITS <= len(candidate) <= MAX_DIGITS + 1):
