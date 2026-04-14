@@ -226,11 +226,13 @@ def ocr_text(img: Image.Image) -> str:
         ).strip()
         cleaned = re.sub(r"[^\d]", "", raw)
         if cleaned:
-            # Early exit: if this threshold already gives an exact lookup hit,
-            # skip the remaining thresholds to avoid 2 unnecessary Tesseract calls.
+            # Exact lookup hit → return immediately (best case, 1 Tesseract call).
             if cleaned in lookup:
                 return cleaned
             candidates.append(cleaned)
+            # Got plausible digits on this pass — no need to run further thresholds.
+            # Additional passes only help when the first pass finds nothing at all.
+            break
 
     if not candidates:
         return ""
@@ -240,9 +242,7 @@ def ocr_text(img: Image.Image) -> str:
         if lookup_text(c) is not None:
             return c
 
-    # Priority 3: majority vote across thresholds
-    from collections import Counter
-    return Counter(candidates).most_common(1)[0][0]
+    return candidates[0]
 
 
 # ---------------------------------------------------------------------------
