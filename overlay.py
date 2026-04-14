@@ -327,6 +327,12 @@ def scan_once(sct=None, state=None) -> list[tuple[str, str]]:
     regions = find_orange_regions(bgr)
     t_find  = (time.perf_counter() - t0) * 1000
 
+    # Sort regions largest-first (most likely to be the main signature)
+    # and cap at max_regions to bound the number of Tesseract calls.
+    max_regions  = config.get("max_regions", 3)
+    n_found      = len(regions)
+    regions      = sorted(regions, key=lambda r: r[2] * r[3], reverse=True)[:max_regions]
+
     hits          = []
     t_ocr_total    = 0.0
     t_lookup_total = 0.0
@@ -366,11 +372,17 @@ def scan_once(sct=None, state=None) -> list[tuple[str, str]]:
             if result:
                 hits.append((candidate, result))
 
+        # Stop after first region that yields a valid lookup hit —
+        # main.py only uses hits[0] anyway.
+        if hits:
+            break
+
     total_ms = (time.perf_counter() - t_total) * 1000
 
     log.debug(
-        "Timing: grab=%.1fms find=%.1fms ocr=%.1fms lookup=%.1fms total=%.1fms regions=%d",
-        t_grab, t_find, t_ocr_total, t_lookup_total, total_ms, len(regions),
+        "Timing: grab=%.1fms find=%.1fms ocr=%.1fms lookup=%.1fms total=%.1fms regions=%d/%d",
+        t_grab, t_find, t_ocr_total, t_lookup_total, total_ms,
+        len(regions), n_found,  # processed / found
     )
 
     if total_ms > 1000:
