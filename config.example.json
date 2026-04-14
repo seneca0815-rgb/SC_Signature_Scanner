@@ -10,6 +10,8 @@
   "hsv_high2": [125, 255, 255],
   "min_area": 120,
   "min_area2": 200,
+  "max_regions2": 3,
+  "max_area2": 5000,
   "aspect_min": 2.0,
   "aspect_max": 6.0,
   "region_padding": 8,

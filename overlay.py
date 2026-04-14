@@ -258,6 +258,14 @@ def ocr_text(img: Image.Image, color_hint: str = "orange") -> str:
     candidates: list[str] = []
     for thresh in (60, 90, 120):
         processed = preprocess(img, threshold=thresh, color_hint=color_hint)
+
+        # Fast reject: count dark (text) pixels in the preprocessed image.
+        # After preprocess(), text is BLACK on WHITE.  A region with fewer
+        # than 20 dark pixels contains no readable glyphs — skip the
+        # expensive Tesseract call (~750 ms) and try the next threshold.
+        if np.count_nonzero(np.array(processed) < 50) < 20:
+            continue
+
         raw = pytesseract.image_to_string(
             processed,
             config=r"--psm 7 -c tessedit_char_whitelist=0123456789"
@@ -364,11 +372,36 @@ def scan_once(sct=None, state=None) -> list[tuple[str, str]]:
     regions = find_orange_regions(bgr)
     t_find  = (time.perf_counter() - t0) * 1000
 
-    # Sort regions largest-first (most likely to be the main signature)
-    # and cap at max_regions to bound the number of Tesseract calls.
-    max_regions  = config.get("max_regions", 3)
+    # Split into per-colour queues, sort largest-first, cap independently.
+    #
+    # Why separate queues?
+    # The secondary (cyan) range detects many SC HUD elements (targeting
+    # brackets, waypoints, …) that are false positives.  If we merge them
+    # into one sorted list, these large blobs push the actual badge below
+    # the max_regions cut-off and the badge is never OCR'd.
+    # By processing all orange candidates first we keep the fast path for
+    # non-Aegis ships identical to pre-1.2.3 behaviour (they rarely have
+    # cyan false positives in the scan region).
+    max_regions  = config.get("max_regions",  3)
+    max_regions2 = config.get("max_regions2", 3)    # cyan cap
+    max_area2    = config.get("max_area2", 5000)    # reject huge cyan blobs (HUD panels)
     n_found      = len(regions)
-    regions      = sorted(regions, key=lambda r: r[2] * r[3], reverse=True)[:max_regions]
+
+    orange_regions = sorted(
+        [r for r in regions if r[4] == "orange"],
+        key=lambda r: r[2] * r[3], reverse=True
+    )[:max_regions]
+
+    cyan_regions = sorted(
+        # Large cyan blobs (> max_area2 px²) are SC HUD panels / brackets,
+        # not digit badges.  Exclude them so the actual badge (≈2500 px²)
+        # is not pushed out of the cap by one giant false positive.
+        [r for r in regions if r[4] == "cyan" and r[2] * r[3] <= max_area2],
+        key=lambda r: r[2] * r[3], reverse=True
+    )[:max_regions2]
+
+    # Orange first; if no hit, fall through to cyan.
+    regions = orange_regions + cyan_regions
 
     hits          = []
     t_ocr_total    = 0.0
@@ -421,9 +454,11 @@ def scan_once(sct=None, state=None) -> list[tuple[str, str]]:
     total_ms = (time.perf_counter() - t_total) * 1000
 
     log.debug(
-        "Timing: grab=%.1fms find=%.1fms ocr=%.1fms lookup=%.1fms total=%.1fms regions=%d/%d",
+        "Timing: grab=%.1fms find=%.1fms ocr=%.1fms lookup=%.1fms total=%.1fms "
+        "regions=%d/%d (o=%d c=%d)",
         t_grab, t_find, t_ocr_total, t_lookup_total, total_ms,
-        len(regions), n_found,  # processed / found
+        len(orange_regions) + len(cyan_regions), n_found,
+        len(orange_regions), len(cyan_regions),
     )
 
     if total_ms > 1000:
