@@ -64,8 +64,9 @@ def _run_pipeline(crop_bgr):
     hits = []
     regions = ov.find_orange_regions(crop_bgr)
     for region in regions:
-        pil    = ov.region_to_pil(crop_bgr, region)
-        text   = ov.ocr_text(pil)
+        x, y, w, h, color_hint = region
+        pil    = ov.region_to_pil(crop_bgr, (x, y, w, h))
+        text   = ov.ocr_text(pil, color_hint=color_hint)
         if text:
             result = ov.lookup_text(text)
             hits.append((text, result or ""))

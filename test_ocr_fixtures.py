@@ -85,8 +85,9 @@ def _run_pipeline(png_path: Path) -> list[tuple[str, str | None]]:
     regions = ov.find_orange_regions(bgr)
     results = []
     for region in regions:
-        pil  = ov.region_to_pil(bgr, region)
-        text = ov.ocr_text(pil)
+        x, y, w, h, color_hint = region
+        pil  = ov.region_to_pil(bgr, (x, y, w, h))
+        text = ov.ocr_text(pil, color_hint=color_hint)
 
         if ov.MIN_DIGITS <= len(text) <= ov.MAX_DIGITS + 1:
             candidates = [text]
@@ -95,7 +96,7 @@ def _run_pipeline(png_path: Path) -> list[tuple[str, str | None]]:
             # multi-number panels; psm 7 on the raw crop catches labels with
             # non-digit prefix (e.g. location-pin icon + "12585").
             raw_pre  = pytesseract.image_to_string(
-                ov.preprocess(pil), config=r"--psm 6"
+                ov.preprocess(pil, color_hint=color_hint), config=r"--psm 6"
             ).strip()
             raw_orig = pytesseract.image_to_string(
                 pil, config=r"--psm 7"

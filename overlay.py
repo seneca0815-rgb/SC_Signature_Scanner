@@ -61,8 +61,13 @@ MAX_DIGITS = 5
 
 _HSV_LOW  = np.array([8,  120, 120], dtype=np.uint8)
 _HSV_HIGH = np.array([30, 255, 255], dtype=np.uint8)
-_MIN_AREA = 200
-_PADDING  = 6
+# Second HSV range for additional ship manufacturers (e.g. Aegis cyan signatures)
+# Set to None to disable.
+_HSV_LOW2:  np.ndarray | None = None
+_HSV_HIGH2: np.ndarray | None = None
+_MIN_AREA  = 200   # minimum area for primary (orange) range
+_MIN_AREA2 = 200   # minimum area for secondary (cyan) range — lower to catch sparse text
+_PADDING   = 6
 
 _empty_scan_count: int = 0   # consecutive empty-OCR counter
 
@@ -70,7 +75,7 @@ _empty_scan_count: int = 0   # consecutive empty-OCR counter
 def init(config_path: Path, lookup_path: Path) -> None:
     """Load config and lookup, apply theme, initialise all module globals."""
     global config, lookup, ROI, INTERVAL, CONFIDENCE, FUZZY_MAX_DIST
-    global _HSV_LOW, _HSV_HIGH, _MIN_AREA, _PADDING
+    global _HSV_LOW, _HSV_HIGH, _HSV_LOW2, _HSV_HIGH2, _MIN_AREA, _MIN_AREA2, _PADDING
 
     log.debug("overlay.init() called with config path: %s", config_path)
 
@@ -90,8 +95,20 @@ def init(config_path: Path, lookup_path: Path) -> None:
 
     _HSV_LOW  = np.array(config.get("hsv_low",  [8,  120, 120]), dtype=np.uint8)
     _HSV_HIGH = np.array(config.get("hsv_high", [30, 255, 255]), dtype=np.uint8)
-    _MIN_AREA = config.get("min_area", 200)
-    _PADDING  = config.get("region_padding", 6)
+    # Second HSV range (cyan, for Aegis ships).
+    # Tighter default (S≥120, V≥150) to avoid false positives from nebulae/stars.
+    # Set "hsv_low2": null in config.json to disable.
+    _low2  = config.get("hsv_low2",  [85, 120, 150])
+    _high2 = config.get("hsv_high2", [125, 255, 255])
+    if _low2 is not None and _high2 is not None:
+        _HSV_LOW2  = np.array(_low2,  dtype=np.uint8)
+        _HSV_HIGH2 = np.array(_high2, dtype=np.uint8)
+    else:
+        _HSV_LOW2  = None
+        _HSV_HIGH2 = None
+    _MIN_AREA  = config.get("min_area",  200)
+    _MIN_AREA2 = config.get("min_area2", 200)
+    _PADDING   = config.get("region_padding", 6)
 
 
 # ---------------------------------------------------------------------------
@@ -117,35 +134,55 @@ def capture_roi(sct: mss.mss = None) -> np.ndarray:
         return _grab(s)
 
 
-def find_orange_regions(bgr: np.ndarray) -> list[tuple[int,int,int,int]]:
-    hsv  = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
-    mask = cv2.inRange(hsv, _HSV_LOW, _HSV_HIGH)
+def find_orange_regions(bgr: np.ndarray) -> list[tuple[int,int,int,int,str]]:
+    """
+    Detect coloured signature regions in *bgr*.
 
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-    mask   = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+    Returns a list of (x, y, w, h, color_hint) tuples where color_hint is
+    ``"orange"`` or ``"cyan"``.  The hint is determined by whichever HSV
+    range contributes the most masked pixels inside the bounding rectangle.
 
-    contours, _ = cv2.findContours(
-        mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-    )
+    A second HSV range (``_HSV_LOW2`` / ``_HSV_HIGH2``) is ORed in when
+    configured, enabling detection of Aegis-style cyan signatures alongside
+    the standard orange ones.
+    """
+    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
 
     aspect_min = config.get("aspect_min", 2.0)
-    aspect_max = config.get("aspect_max", 4.0)
-    regions = []
+    aspect_max = config.get("aspect_max", 6.0)
     h_img, w_img = bgr.shape[:2]
 
-    for cnt in contours:
-        area = cv2.contourArea(cnt)
-        if area < _MIN_AREA:
-            continue
-        x, y, w, h = cv2.boundingRect(cnt)
-        aspect = w / max(1, h)
-        if not (aspect_min <= aspect <= aspect_max):
-            continue
-        x1 = max(0, x - _PADDING)
-        y1 = max(0, y - _PADDING)
-        x2 = min(w_img, x + w + _PADDING)
-        y2 = min(h_img, y + h + _PADDING)
-        regions.append((x1, y1, x2 - x1, y2 - y1))
+    def _contours_to_regions(mask: np.ndarray, min_area: int,
+                             color_hint: str) -> list[tuple[int,int,int,int,str]]:
+        """Extract bounding-box regions from a morphed mask."""
+        cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        out = []
+        for cnt in cnts:
+            if cv2.contourArea(cnt) < min_area:
+                continue
+            x, y, w, h = cv2.boundingRect(cnt)
+            if not (aspect_min <= w / max(1, h) <= aspect_max):
+                continue
+            x1 = max(0, x - _PADDING)
+            y1 = max(0, y - _PADDING)
+            x2 = min(w_img, x + w + _PADDING)
+            y2 = min(h_img, y + h + _PADDING)
+            out.append((x1, y1, x2 - x1, y2 - y1, color_hint))
+        return out
+
+    # Primary range (orange) — small close kernel (3×3) for dense solid text.
+    mask_orange = cv2.inRange(hsv, _HSV_LOW, _HSV_HIGH)
+    kernel_3x3  = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+    mask_orange = cv2.morphologyEx(mask_orange, cv2.MORPH_CLOSE, kernel_3x3)
+    regions     = _contours_to_regions(mask_orange, _MIN_AREA, "orange")
+
+    # Secondary range (cyan) — wider close kernel (20×5) bridges the larger
+    # inter-digit gaps typical of Aegis-style sparse rendered HUD text.
+    if _HSV_LOW2 is not None and _HSV_HIGH2 is not None:
+        mask_cyan  = cv2.inRange(hsv, _HSV_LOW2, _HSV_HIGH2)
+        kernel_20x5 = cv2.getStructuringElement(cv2.MORPH_RECT, (20, 5))
+        mask_cyan  = cv2.morphologyEx(mask_cyan, cv2.MORPH_CLOSE, kernel_20x5)
+        regions   += _contours_to_regions(mask_cyan, _MIN_AREA2, "cyan")
 
     return regions
 
@@ -161,65 +198,66 @@ def region_to_pil(bgr: np.ndarray,
     return Image.fromarray(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB))
 
 
-def preprocess(img: Image.Image, threshold: int = 80) -> Image.Image:
+def preprocess(img: Image.Image, threshold: int = 80,
+               color_hint: str = "orange") -> Image.Image:
     """
-    Orange-Text-Extraktion + Tesseract-Vorbereitung.
+    Coloured-text extraction + Tesseract preparation.
 
-    STRATEGY 1 – Adaptive upscaling (adaptive-ocr branch):
-    Previously the image was always scaled by a fixed 4×, which meant that
-    small regions (e.g. 10 px tall floating labels at high FOV) were only
-    40 px tall after upscale — too small for reliable Tesseract recognition —
-    while larger regions were wastefully large.
-    Now the image is scaled so its height is always exactly 60 px (the
-    empirically good minimum for Tesseract's digit recognition), maintaining
-    the original aspect ratio.  If the region is already taller than 60 px
-    it is left at its original size (scale ≥ 1 is enforced) so we never
-    downscale a region that is already large enough.
+    STRATEGY 1 – Adaptive upscaling:
+    The image is scaled so its height is always exactly 60 px (the empirically
+    good minimum for Tesseract digit recognition), maintaining aspect ratio.
+    Already-tall regions are left at their original size (scale ≥ 1).
 
     The `threshold` parameter (default 80) is exposed so that ocr_text()
-    can call preprocess() multiple times with different thresholds without
-    duplicating the rest of the pipeline (STRATEGY 2).
+    can call preprocess() multiple times with different thresholds.
+
+    `color_hint` selects the channel-isolation formula:
+      "orange" → R+G−B  (isolates orange: high R and G, low B)
+      "cyan"   → G+B−R  (isolates cyan:   high G and B, low R)
+    Any other value falls back to "orange".
     """
-    # --- STRATEGY 1: adaptive upscaling to TARGET_HEIGHT px tall ---
     TARGET_HEIGHT = 60
     w, h = img.size
     scale = max(1.0, TARGET_HEIGHT / max(h, 1))
     img   = img.resize((round(w * scale), round(h * scale)), Image.LANCZOS)
 
-    # Orange isolieren über R+G-B Kanal
     import PIL.ImageChops as chops
-    r, g, b = img.split()
-    orange  = chops.subtract(chops.add(r, g), b)
     from PIL import ImageEnhance
-    orange  = ImageEnhance.Contrast(orange).enhance(3.0)
-    orange  = orange.point(lambda p: 255 if p > threshold else 0)
-    orange  = ImageOps.invert(orange)
-    orange  = orange.filter(ImageFilter.SHARPEN)
-    return orange
+    r, g, b = img.split()
+
+    if color_hint == "cyan":
+        # Cyan: high G and B, low R → G+B−R
+        channel = chops.subtract(chops.add(g, b), r)
+    else:
+        # Orange: high R and G, low B → R+G−B
+        channel = chops.subtract(chops.add(r, g), b)
+
+    channel = ImageEnhance.Contrast(channel).enhance(3.0)
+    channel = channel.point(lambda p: 255 if p > threshold else 0)
+    channel = ImageOps.invert(channel)
+    channel = channel.filter(ImageFilter.SHARPEN)
+    return channel
 
 
-def ocr_text(img: Image.Image) -> str:
+def ocr_text(img: Image.Image, color_hint: str = "orange") -> str:
     """
-    Gibt erkannte Ziffernfolge zurück, oder ''.
+    Returns recognised digit string, or '' on failure.
 
-    STRATEGY 2 – Multi-threshold scanning (adaptive-ocr branch):
-    A single fixed threshold (previously 80) clips faint strokes at low
-    values and over-fills thick strokes at high values, causing Tesseract
-    to misread individual digits.  Running three passes with thresholds
-    60 / 90 / 120 covers the full brightness range of orange text and lets
-    us pick the best result:
+    STRATEGY 2 – Multi-threshold scanning:
+    Runs three preprocessing passes (thresholds 60 / 90 / 120) to cover the
+    full brightness range of coloured text.  Stops at the first pass that
+    finds digits.
 
-      Priority 1 – exact key match in the lookup table (highest confidence)
-      Priority 2 – fuzzy match within FUZZY_MAX_DIST (still a real hit)
-      Priority 3 – majority vote across the three results (tie-break)
+      Priority 1 – exact key match in the lookup table
+      Priority 2 – fuzzy / substring match within FUZZY_MAX_DIST
+      Fallback    – return whatever digits were found
 
-    If all three passes return the same string the overhead is negligible
-    in practice because Tesseract's bottleneck is model loading, not pixel
-    differences this small.
+    `color_hint` is forwarded to preprocess() to select the correct
+    channel-isolation formula (orange vs cyan).
     """
     candidates: list[str] = []
     for thresh in (60, 90, 120):
-        processed = preprocess(img, threshold=thresh)
+        processed = preprocess(img, threshold=thresh, color_hint=color_hint)
         raw = pytesseract.image_to_string(
             processed,
             config=r"--psm 7 -c tessedit_char_whitelist=0123456789"
@@ -230,8 +268,7 @@ def ocr_text(img: Image.Image) -> str:
             if cleaned in lookup:
                 return cleaned
             candidates.append(cleaned)
-            # Got plausible digits on this pass — no need to run further thresholds.
-            # Additional passes only help when the first pass finds nothing at all.
+            # Got digits on this pass — no need for more thresholds.
             break
 
     if not candidates:
@@ -338,10 +375,12 @@ def scan_once(sct=None, state=None) -> list[tuple[str, str]]:
     t_lookup_total = 0.0
 
     for region in regions:
-        pil = region_to_pil(bgr, region)
+        # Unpack 5-tuple: (x, y, w, h, color_hint)
+        x, y, w, h, color_hint = region
+        pil = region_to_pil(bgr, (x, y, w, h))
 
         t0   = time.perf_counter()
-        text = ocr_text(pil)
+        text = ocr_text(pil, color_hint=color_hint)
         t_ocr_total += (time.perf_counter() - t0) * 1000
 
         if MIN_DIGITS <= len(text) <= MAX_DIGITS + 1:
@@ -353,7 +392,7 @@ def scan_once(sct=None, state=None) -> list[tuple[str, str]]:
             # psm 7 on the raw image works for wider, lower-contrast labels.
             t0       = time.perf_counter()
             raw_pre  = pytesseract.image_to_string(
-                preprocess(pil), config=r"--psm 6"
+                preprocess(pil, color_hint=color_hint), config=r"--psm 6"
             ).strip()
             raw_orig = pytesseract.image_to_string(
                 pil, config=r"--psm 7"

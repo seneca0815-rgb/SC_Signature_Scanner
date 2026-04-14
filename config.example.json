@@ -3,9 +3,13 @@
 
   "scan_region": { "top": 130, "left": 200, "width": 2160, "height": 900 },
 
+  "_hsv_note": "Primary range (orange – Drake, RSI, etc.) and secondary range (cyan – Aegis). Set hsv_low2/hsv_high2 to null to disable cyan detection.",
   "hsv_low":  [5,  80,  80],
   "hsv_high": [35, 255, 255],
+  "hsv_low2":  [85, 120, 150],
+  "hsv_high2": [125, 255, 255],
   "min_area": 120,
+  "min_area2": 200,
   "aspect_min": 2.0,
   "aspect_max": 6.0,
   "region_padding": 8,

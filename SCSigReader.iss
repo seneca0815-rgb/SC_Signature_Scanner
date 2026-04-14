@@ -71,11 +71,15 @@ Source: "sounds\signal.wav";      DestDir: "{app}\sounds"; Flags: ignoreversion
 Source: "redist\tesseract-setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [Run]
-; 1. Install Tesseract silently
+; 1. Install Tesseract silently – skipped when it is already present.
+;    The NSIS-based Tesseract installer shows an uninstall/reinstall dialog
+;    when it detects an existing installation, even with /S.  Guarding with
+;    Check: TesseractNotInstalled avoids that dialog entirely.
 Filename: "{tmp}\tesseract-setup.exe"; \
   Parameters: "/S /D=C:\Program Files\Tesseract-OCR"; \
   StatusMsg: "Installing Tesseract OCR..."; \
-  Flags: waituntilterminated
+  Flags: waituntilterminated; \
+  Check: TesseractNotInstalled
 
 ; 2. Patch tesseract_cmd value in config.json after Tesseract is installed.
 ; Uses ConvertFrom-Json / ConvertTo-Json to avoid corrupting other keys.
@@ -113,6 +117,15 @@ function SendMessageTimeout(hWnd: Cardinal; Msg: Cardinal; wParam: Cardinal;
   lParam: AnsiString; fuFlags: Cardinal; uTimeout: Cardinal;
   var lpdwResult: DWORD): Integer;
   external 'SendMessageTimeoutA@user32.dll stdcall';
+
+{ Returns True when Tesseract is NOT installed at the default path.
+  Used as a Check: guard on the [Run] entry so we skip the bundled
+  Tesseract installer when the user already has Tesseract — the NSIS
+  installer would otherwise show an uninstall/reinstall dialog. }
+function TesseractNotInstalled: Boolean;
+begin
+  Result := not FileExists('C:\Program Files\Tesseract-OCR\tesseract.exe');
+end;
 
 { Returns True when Dir is not already present in the system PATH,
   so the [Registry] entry is only written when actually needed. }
