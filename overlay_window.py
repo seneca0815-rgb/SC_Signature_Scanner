@@ -36,8 +36,9 @@ def _rarity_colour(text: str, default: str) -> str:
 
 POSITION_PRESETS = [
     "custom",
-    "top_left", "top_center", "top_right",
-    "center_left", "center", "center_right",
+    "top_left",    "top_center",    "top_right",
+    "upper_left",  "upper_center",  "upper_right",
+    "center_left", "center",        "center_right",
     "bottom_left", "bottom_center", "bottom_right",
 ]
 
@@ -67,6 +68,12 @@ def _compute_position(preset: str, win: tk.Toplevel, root: tk.Tk,
         col, row = "center", "top"
     elif preset == "top_right":
         col, row = "right", "top"
+    elif preset == "upper_left":
+        col, row = "left", "upper"
+    elif preset == "upper_center":
+        col, row = "center", "upper"
+    elif preset == "upper_right":
+        col, row = "right", "upper"
     elif preset == "center_left":
         col, row = "left", "center"
     elif preset == "center_right":
@@ -89,6 +96,9 @@ def _compute_position(preset: str, win: tk.Toplevel, root: tk.Tk,
 
     if row == "top":
         y = margin
+    elif row == "upper":
+        # Halfway between top edge and screen centre
+        y = max(margin, sh // 4 - wh // 2)
     elif row == "bottom":
         y = sh - wh - margin
     else:
