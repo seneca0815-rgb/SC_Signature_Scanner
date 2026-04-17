@@ -186,6 +186,10 @@ def _run():
     # Initialise overlay module (loads config+lookup, applies theme, sets globals)
     import overlay as ov
     ov.init(CONFIG_PATH, LOOKUP_PATH)
+    # Use the theme-merged config so UI components receive the correct colours.
+    # overlay.init() does {**config, **theme} — without this, OverlayWindow would
+    # always read the raw bg_color/fg_color from disk (vargo defaults).
+    config = ov.config
 
     # --- Shared state ---
     state = AppState(config)
