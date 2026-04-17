@@ -16,20 +16,20 @@ THEMES = {
         "alpha":       0.88,
         "example":     "ℹ  Quantainium (1x)  ·  Legendary",
     },
-    "light": {
-        "bg_color":    "#f0f0f0",
-        "fg_color":    "#1a1a2e",
+    "cockpit": {
+        "bg_color":    "#071a07",
+        "fg_color":    "#39ff14",
         "font_family": "Consolas",
         "font_size":   13,
-        "alpha":       0.92,
+        "alpha":       0.88,
         "example":     "ℹ  Bexalite (2x)  ·  Rare",
     },
     "minimal": {
-        "bg_color":    "#000000",
+        "bg_color":    "#0d0d1a",
         "fg_color":    "#ffffff",
         "font_family": "Consolas",
         "font_size":   11,
-        "alpha":       0.70,
+        "alpha":       0.72,
         "example":     "ℹ  Laranite (3x)  ·  Uncommon",
     },
     "vargo": {
@@ -38,6 +38,14 @@ THEMES = {
         "font_family": "Consolas",
         "font_size":   13,
         "alpha":       0.90,
+        "example":     "ℹ  Quantainium (3x)  ·  Legendary",
+    },
+    "ghost": {
+        "bg_color":    "#000000",
+        "fg_color":    "#ffffff",
+        "font_family": "Consolas",
+        "font_size":   13,
+        "alpha":       0.55,
         "example":     "ℹ  Quantainium (3x)  ·  Legendary",
     },
 }
