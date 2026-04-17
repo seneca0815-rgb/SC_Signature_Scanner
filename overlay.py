@@ -1,7 +1,8 @@
 """
-Star Citizen UI Overlay – Hauptprogramm (robuste Version)
-Erkennt orange Signaturnummern automatisch per Farb-Segmentierung,
-unabhängig von UI-Skalierung oder FOV-Einstellung.
+Star Citizen UI Overlay – Hauptprogramm (Icon-Anchor-Strategie)
+Erkennt das farbige Signatur-Icon (Raute) des jeweiligen Herstellers und
+liest die immer weiße Signaturzahl rechts davon per OCR.
+Unterstützte HUD-Farben: orange (Anvil), cyan (Aegis), grün (Krueger), lila (RSI).
 """
 
 import sys
@@ -18,7 +19,7 @@ import cv2
 import mss
 import numpy as np
 import pytesseract
-from PIL import Image, ImageOps, ImageFilter
+from PIL import Image
 
 from logger_setup import get_logger
 
@@ -54,31 +55,38 @@ config:         dict  = {}
 lookup:         dict  = {}
 ROI:            dict  = {}
 INTERVAL:       float = 0.5
-CONFIDENCE:     int   = 60
 FUZZY_MAX_DIST: int   = 1
 MIN_DIGITS = 4
 MAX_DIGITS = 5
 
-_HSV_LOW  = np.array([8,  120, 120], dtype=np.uint8)
-_HSV_HIGH = np.array([30, 255, 255], dtype=np.uint8)
-# Second HSV range for additional ship manufacturers (e.g. Aegis cyan signatures)
-# Set to None to disable.
-_HSV_LOW2:  np.ndarray | None = None
-_HSV_HIGH2: np.ndarray | None = None
-_MIN_AREA  = 200   # minimum area for primary (orange) range
-_MIN_AREA2 = 200   # minimum area for secondary (cyan) range — lower to catch sparse text
-_PADDING   = 6
-_LUM_THRESHOLD = 150   # luminance threshold for white/near-white text pass
-_LUM_ENABLED   = False # disabled by default — no confirmed white-signature ship yet
+# ---------------------------------------------------------------------------
+# Pill-Detektion: helle Cluster (Icon + weiße Zahl) im Signatur-Display
+# ---------------------------------------------------------------------------
+_PILL_V_THRESHOLD  = 130   # V-Kanal-Schwellwert für helle Pixel
+_PILL_CLOSE_W      = 14    # Closing-Kernel Breite (verbindet Icon und Zahl)
+_PILL_CLOSE_H      = 5     # Closing-Kernel Höhe
+_PILL_ASPECT_MIN   = 2.0   # Mindest-Aspekt (breiter als hoch)
+_PILL_ASPECT_MAX   = 8.0   # Maximal-Aspekt
+_PILL_AREA_MIN     = 200   # Mindestfläche der hellen Pixel im Cluster
+_PILL_AREA_MAX     = 6000  # Maximalgröße
+_PILL_ICON_WIDTH   = 16    # Geschätzte Icon-Breite (übersprungen beim OCR)
+_PILL_TEXT_EXTEND  = 100   # Pixel rechts über Cluster hinaus (volle Zahl)
+
+# OCR-Parameter
+_TEXT_STRIP_HPAD   = 6     # vertikale Pufferzone um den Cluster
+_WHITE_THRESHOLD   = 140   # Graustufen-Schwellwert: Pixel darüber = Text
+_TARGET_OCR_HEIGHT = 60    # Zielhöhe für Tesseract
 
 _empty_scan_count: int = 0   # consecutive empty-OCR counter
 
 
 def init(config_path: Path, lookup_path: Path) -> None:
     """Load config and lookup, apply theme, initialise all module globals."""
-    global config, lookup, ROI, INTERVAL, CONFIDENCE, FUZZY_MAX_DIST
-    global _HSV_LOW, _HSV_HIGH, _HSV_LOW2, _HSV_HIGH2, _MIN_AREA, _MIN_AREA2, _PADDING
-    global _LUM_THRESHOLD, _LUM_ENABLED
+    global config, lookup, ROI, INTERVAL, FUZZY_MAX_DIST
+    global _TEXT_STRIP_HPAD, _WHITE_THRESHOLD, _TARGET_OCR_HEIGHT
+    global _PILL_V_THRESHOLD, _PILL_CLOSE_W, _PILL_CLOSE_H
+    global _PILL_ASPECT_MIN, _PILL_ASPECT_MAX, _PILL_AREA_MIN, _PILL_AREA_MAX
+    global _PILL_ICON_WIDTH, _PILL_TEXT_EXTEND
 
     log.debug("overlay.init() called with config path: %s", config_path)
 
@@ -93,31 +101,24 @@ def init(config_path: Path, lookup_path: Path) -> None:
 
     ROI            = config.get("scan_region") or config.get("roi", {})
     INTERVAL       = config.get("interval_ms", 500) / 1000
-    CONFIDENCE     = config.get("ocr_confidence", 60)
     FUZZY_MAX_DIST = config.get("fuzzy_max_distance", 1)
 
-    _HSV_LOW  = np.array(config.get("hsv_low",  [8,  120, 120]), dtype=np.uint8)
-    _HSV_HIGH = np.array(config.get("hsv_high", [30, 255, 255]), dtype=np.uint8)
-    # Second HSV range (cyan, for Aegis ships).
-    # Tighter default (S≥120, V≥150) to avoid false positives from nebulae/stars.
-    # Set "hsv_low2": null in config.json to disable.
-    _low2  = config.get("hsv_low2",  [85, 120, 150])
-    _high2 = config.get("hsv_high2", [125, 255, 255])
-    if _low2 is not None and _high2 is not None:
-        _HSV_LOW2  = np.array(_low2,  dtype=np.uint8)
-        _HSV_HIGH2 = np.array(_high2, dtype=np.uint8)
-    else:
-        _HSV_LOW2  = None
-        _HSV_HIGH2 = None
-    _MIN_AREA  = config.get("min_area",  200)
-    _MIN_AREA2 = config.get("min_area2", 200)
-    _PADDING   = config.get("region_padding", 6)
-    _LUM_THRESHOLD = config.get("luminance_threshold", 150)
-    _LUM_ENABLED   = config.get("luminance_enabled", False)
+    _PILL_V_THRESHOLD  = config.get("pill_v_threshold",   130)
+    _PILL_CLOSE_W      = config.get("pill_close_w",       14)
+    _PILL_CLOSE_H      = config.get("pill_close_h",        5)
+    _PILL_ASPECT_MIN   = config.get("pill_aspect_min",    2.0)
+    _PILL_ASPECT_MAX   = config.get("pill_aspect_max",    8.0)
+    _PILL_AREA_MIN     = config.get("pill_area_min",      200)
+    _PILL_AREA_MAX     = config.get("pill_area_max",     6000)
+    _PILL_ICON_WIDTH   = config.get("pill_icon_width",     16)
+    _PILL_TEXT_EXTEND  = config.get("pill_text_extend",   100)
+    _TEXT_STRIP_HPAD   = config.get("text_strip_hpad",     6)
+    _WHITE_THRESHOLD   = config.get("white_threshold",   140)
+    _TARGET_OCR_HEIGHT = config.get("target_ocr_height",  60)
 
 
 # ---------------------------------------------------------------------------
-# Schritt 1: Screenshot → orange Regionen finden
+# Schritt 1: Screenshot erfassen
 # ---------------------------------------------------------------------------
 
 
@@ -139,182 +140,134 @@ def capture_roi(sct: mss.mss = None) -> np.ndarray:
         return _grab(s)
 
 
-def find_orange_regions(bgr: np.ndarray) -> list[tuple[int,int,int,int,str]]:
-    """
-    Detect coloured signature regions in *bgr*.
+# ---------------------------------------------------------------------------
+# Schritt 2: Signatur-Pille erkennen (Bright-Cluster-Strategie)
+# ---------------------------------------------------------------------------
 
-    Returns a list of (x, y, w, h, color_hint) tuples.  color_hint is one of:
-      ``"orange"`` — primary HSV range (Drake, RSI, …)
-      ``"cyan"``   — secondary HSV range (Aegis, …)
-      ``"white"``  — luminance pass for near-white / low-saturation text
-                     (Anvil and similar manufacturers)
-    """
-    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+# Helle Cluster-Erkennungsparameter (konfigurierbar via config.json)
+_PILL_V_THRESHOLD  = 130   # V-Kanal-Schwellwert für helle Pixel
+_PILL_CLOSE_W      = 14    # Closing-Kernel Breite (verbindet Icon und Zahl)
+_PILL_CLOSE_H      = 5     # Closing-Kernel Höhe
+_PILL_ASPECT_MIN   = 2.0   # Mindest-Aspekt (breiter als hoch)
+_PILL_ASPECT_MAX   = 8.0   # Maximal-Aspekt
+_PILL_AREA_MIN     = 200   # Mindestfläche der hellen Pixel im Cluster
+_PILL_AREA_MAX     = 6000  # Maximalgröße (kein ganzes HUD-Panel)
+_PILL_ICON_WIDTH   = 16    # Geschätzte Icon-Breite in Pixeln (übersprungen beim OCR)
+_PILL_TEXT_EXTEND  = 100   # Pixel rechts über den Cluster hinaus (volle Zahl sichern)
 
-    aspect_min = config.get("aspect_min", 2.0)
-    aspect_max = config.get("aspect_max", 6.0)
+
+def find_signature_pills(bgr: np.ndarray) -> list[tuple[int, int, int, int]]:
+    """Findet helle Signatur-Display-Pillen im Bild.
+
+    Das Signatur-Element besteht aus einem dunklen abgerundeten Rechteck
+    (Pille) mit einem Location-Pin-Icon und der weißen Signaturzahl darin.
+    Der kombinierte helle Inhalt (Icon + Zahl) bildet einen distinktiven
+    Cluster mit Aspekt 2–8 und kleiner Fläche.
+
+    Gibt eine Liste von (x, y, w, h) Bounding-Boxes der hellen Cluster zurück,
+    sortiert nach Fläche (größte zuerst, da die Signatur-Pille meist der
+    prominenteste Cluster ist).
+    """
+    hsv    = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+    val    = hsv[:, :, 2]
     h_img, w_img = bgr.shape[:2]
 
-    def _contours_to_regions(mask: np.ndarray, min_area: int,
-                             color_hint: str) -> list[tuple[int,int,int,int,str]]:
-        """Extract bounding-box regions from a morphed mask."""
-        cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        out = []
-        for cnt in cnts:
-            if cv2.contourArea(cnt) < min_area:
-                continue
-            x, y, w, h = cv2.boundingRect(cnt)
-            if not (aspect_min <= w / max(1, h) <= aspect_max):
-                continue
-            x1 = max(0, x - _PADDING)
-            y1 = max(0, y - _PADDING)
-            x2 = min(w_img, x + w + _PADDING)
-            y2 = min(h_img, y + h + _PADDING)
-            out.append((x1, y1, x2 - x1, y2 - y1, color_hint))
-        return out
+    _, bright = cv2.threshold(val, _PILL_V_THRESHOLD, 255, cv2.THRESH_BINARY)
+    kernel = cv2.getStructuringElement(
+        cv2.MORPH_RECT, (_PILL_CLOSE_W, _PILL_CLOSE_H)
+    )
+    closed = cv2.morphologyEx(bright, cv2.MORPH_CLOSE, kernel)
 
-    # Primary range (orange) — small close kernel (3×3) for dense solid text.
-    mask_orange = cv2.inRange(hsv, _HSV_LOW, _HSV_HIGH)
-    kernel_3x3  = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-    mask_orange = cv2.morphologyEx(mask_orange, cv2.MORPH_CLOSE, kernel_3x3)
-    regions     = _contours_to_regions(mask_orange, _MIN_AREA, "orange")
+    cnts, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    pills: list[tuple[int, int, int, int]] = []
 
-    # Secondary range (cyan) — wider close kernel (20×5) bridges the larger
-    # inter-digit gaps typical of Aegis-style sparse rendered HUD text.
-    if _HSV_LOW2 is not None and _HSV_HIGH2 is not None:
-        mask_cyan  = cv2.inRange(hsv, _HSV_LOW2, _HSV_HIGH2)
-        kernel_20x5 = cv2.getStructuringElement(cv2.MORPH_RECT, (20, 5))
-        mask_cyan  = cv2.morphologyEx(mask_cyan, cv2.MORPH_CLOSE, kernel_20x5)
-        regions   += _contours_to_regions(mask_cyan, _MIN_AREA2, "cyan")
-
-    # Tertiary pass (white / near-white) — luminance threshold for
-    # manufacturers that render HUD text in white or low-saturation tones
-    # (e.g. Anvil Aerospace).  Uses greyscale brightness instead of a
-    # colour-channel formula so no HSV tuning is required.
-    if _LUM_ENABLED:
-        gray        = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
-        _, mask_lum = cv2.threshold(gray, _LUM_THRESHOLD, 255, cv2.THRESH_BINARY)
-        mask_lum    = cv2.morphologyEx(mask_lum, cv2.MORPH_CLOSE, kernel_3x3)
-        regions    += _contours_to_regions(mask_lum, _MIN_AREA, "white")
-
-    return regions
-
-# ---------------------------------------------------------------------------
-# Schritt 2: Region → OCR
-# ---------------------------------------------------------------------------
-
-def region_to_pil(bgr: np.ndarray,
-                  region: tuple[int,int,int,int]) -> Image.Image:
-    """Schneidet eine Region aus und konvertiert zu PIL."""
-    x, y, w, h = region
-    crop = bgr[y:y+h, x:x+w]
-    return Image.fromarray(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB))
-
-
-def preprocess(img: Image.Image, threshold: int = 80,
-               color_hint: str = "orange") -> Image.Image:
-    """
-    Coloured-text extraction + Tesseract preparation.
-
-    STRATEGY 1 – Adaptive upscaling:
-    The image is scaled so its height is always exactly 60 px (the empirically
-    good minimum for Tesseract digit recognition), maintaining aspect ratio.
-    Already-tall regions are left at their original size (scale ≥ 1).
-
-    The `threshold` parameter (default 80) is exposed so that ocr_text()
-    can call preprocess() multiple times with different thresholds.
-
-    `color_hint` selects the preprocessing formula:
-      "orange" → R+G−B  (isolates orange: high R and G, low B)
-      "cyan"   → G+B−R  (isolates cyan:   high G and B, low R)
-      "white"  → greyscale + contrast + threshold (no channel arithmetic
-                 needed — the text is already near-neutral)
-    Any other value falls back to "orange".
-    """
-    TARGET_HEIGHT = 60
-    w, h = img.size
-    scale = max(1.0, TARGET_HEIGHT / max(h, 1))
-    img   = img.resize((round(w * scale), round(h * scale)), Image.LANCZOS)
-
-    from PIL import ImageEnhance
-
-    if color_hint == "white":
-        # Near-white / low-saturation text: convert to greyscale and boost
-        # contrast so digit strokes stand out against a darker background.
-        # The threshold parameter is reused here as the grey cutoff level.
-        channel = img.convert("L")
-        channel = ImageEnhance.Contrast(channel).enhance(3.0)
-        channel = channel.point(lambda p: 255 if p > threshold else 0)
-        channel = ImageOps.invert(channel)
-        channel = channel.filter(ImageFilter.SHARPEN)
-        return channel
-
-    import PIL.ImageChops as chops
-    r, g, b = img.split()
-
-    if color_hint == "cyan":
-        # Cyan: high G and B, low R → G+B−R
-        channel = chops.subtract(chops.add(g, b), r)
-    else:
-        # Orange: high R and G, low B → R+G−B
-        channel = chops.subtract(chops.add(r, g), b)
-
-    channel = ImageEnhance.Contrast(channel).enhance(3.0)
-    channel = channel.point(lambda p: 255 if p > threshold else 0)
-    channel = ImageOps.invert(channel)
-    channel = channel.filter(ImageFilter.SHARPEN)
-    return channel
-
-
-def ocr_text(img: Image.Image, color_hint: str = "orange") -> str:
-    """
-    Returns recognised digit string, or '' on failure.
-
-    STRATEGY 2 – Multi-threshold scanning:
-    Runs three preprocessing passes (thresholds 60 / 90 / 120) to cover the
-    full brightness range of coloured text.  Stops at the first pass that
-    finds digits.
-
-      Priority 1 – exact key match in the lookup table
-      Priority 2 – fuzzy / substring match within FUZZY_MAX_DIST
-      Fallback    – return whatever digits were found
-
-    `color_hint` is forwarded to preprocess() to select the correct
-    channel-isolation formula (orange vs cyan).
-    """
-    candidates: list[str] = []
-    for thresh in (60, 90, 120):
-        processed = preprocess(img, threshold=thresh, color_hint=color_hint)
-
-        # Fast reject: count dark (text) pixels in the preprocessed image.
-        # After preprocess(), text is BLACK on WHITE.  A region with fewer
-        # than 20 dark pixels contains no readable glyphs — skip the
-        # expensive Tesseract call (~750 ms) and try the next threshold.
-        if np.count_nonzero(np.array(processed) < 50) < 20:
+    for cnt in cnts:
+        area = cv2.contourArea(cnt)
+        if not (_PILL_AREA_MIN <= area <= _PILL_AREA_MAX):
             continue
+        x, y, w, h = cv2.boundingRect(cnt)
+        asp = w / max(h, 1)
+        if not (_PILL_ASPECT_MIN <= asp <= _PILL_ASPECT_MAX):
+            continue
+        # Pille darf nicht am rechten Bildrand kleben
+        if x + w + 10 >= w_img:
+            continue
+        pills.append((x, y, w, h))
 
-        raw = pytesseract.image_to_string(
-            processed,
-            config=r"--psm 7 -c tessedit_char_whitelist=0123456789"
-        ).strip()
-        cleaned = re.sub(r"[^\d]", "", raw)
-        if cleaned:
-            # Exact lookup hit → return immediately (best case, 1 Tesseract call).
-            if cleaned in lookup:
-                return cleaned
-            candidates.append(cleaned)
-            # Got digits on this pass — no need for more thresholds.
-            break
+    pills.sort(key=lambda p: p[2] * p[3], reverse=True)
+    return pills
 
-    if not candidates:
+
+# ---------------------------------------------------------------------------
+# Schritt 3: Text innerhalb der Pille OCR-en
+# ---------------------------------------------------------------------------
+
+
+def _find_text_start_col(hsv_strip: np.ndarray) -> int:
+    """Findet die erste Spalte mit echtem weißem Text.
+
+    Kriterium: S_min < 35 UND V_max > 200.
+    - Icon-Pixel haben S_min ~40-70 (farbige Fringes) und V_max variabel.
+    - Weiße Text-Pixel haben S_min < 30 und V_max nahe 255.
+
+    Gibt den Spalten-Offset zurück ab dem der Text beginnt.
+    Fallback: _PILL_ICON_WIDTH.
+    """
+    col_sat_min = hsv_strip[:, :, 1].min(axis=0)
+    col_val_max = hsv_strip[:, :, 2].max(axis=0)
+    white_cols  = (col_sat_min < 35) & (col_val_max > 200)
+    if white_cols.any():
+        return int(np.argmax(white_cols))
+    return _PILL_ICON_WIDTH
+
+
+def ocr_pill(bgr: np.ndarray, pill: tuple[int, int, int, int]) -> str:
+    """Liest die weiße Signaturzahl aus einer erkannten Pille.
+
+    Das Icon am linken Rand wird durch Sättigungs-Analyse übersprungen,
+    sodass nur der Zifferntext an Tesseract übergeben wird.
+
+    Gibt einen bereinigten Ziffernstring zurück oder '' bei Fehlschlag.
+    """
+    x, y, w, h = pill
+    h_img, w_img = bgr.shape[:2]
+
+    y1 = max(0, y - _TEXT_STRIP_HPAD)
+    y2 = min(h_img, y + h + _TEXT_STRIP_HPAD)
+    x1 = x
+    x2 = min(w_img, x + w + _PILL_TEXT_EXTEND)
+
+    if x2 <= x1 or y2 <= y1:
         return ""
 
-    # Priority 2: any fuzzy / substring match in the lookup table
-    for c in candidates:
-        if lookup_text(c) is not None:
-            return c
+    hsv_strip = cv2.cvtColor(bgr[y1:y2, x1:x2], cv2.COLOR_BGR2HSV)
+    text_col  = _find_text_start_col(hsv_strip)
 
-    return candidates[0]
+    # Text-Region: Icon überspringen, rechts ausreichend Platz lassen
+    xt1 = min(x1 + text_col, x2 - 10)
+    strip = bgr[y1:y2, xt1:x2]
+
+    # Auf Ziel-Höhe skalieren
+    sh, sw = strip.shape[:2]
+    scale = max(1.0, _TARGET_OCR_HEIGHT / max(sh, 1))
+    if scale > 1.0:
+        strip = cv2.resize(strip,
+                           (round(sw * scale), round(sh * scale)),
+                           interpolation=cv2.INTER_LANCZOS4)
+
+    gray     = cv2.cvtColor(strip, cv2.COLOR_BGR2GRAY)
+    _, binary = cv2.threshold(gray, _WHITE_THRESHOLD, 255, cv2.THRESH_BINARY)
+    inverted  = cv2.bitwise_not(binary)
+
+    # Fast-reject: zu wenig Text-Pixel
+    if np.count_nonzero(inverted < 50) < 20:
+        return ""
+
+    pil = Image.fromarray(inverted)
+    raw = pytesseract.image_to_string(
+        pil, config=r"--psm 7 -c tessedit_char_whitelist=0123456789"
+    ).strip()
+    return re.sub(r"[^\d]", "", raw)
 
 
 # ---------------------------------------------------------------------------
@@ -383,10 +336,9 @@ def lookup_text(raw: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 def scan_once(sct=None, state=None) -> list[tuple[str, str]]:
-    """
-    Ein Scan-Durchlauf.
-    Gibt Liste von (erkannte_zahl, lookup_ergebnis) zurück.
+    """Ein Scan-Durchlauf (Icon-Anchor-Strategie).
 
+    Gibt Liste von (erkannte_zahl, lookup_ergebnis) zurück.
     Wenn state übergeben wird, werden Cycle-Zeiten in AppState aufgezeichnet.
     """
     t_total = time.perf_counter()
@@ -395,80 +347,25 @@ def scan_once(sct=None, state=None) -> list[tuple[str, str]]:
     bgr = capture_roi(sct)
     t_grab = (time.perf_counter() - t0) * 1000
 
-    t0      = time.perf_counter()
-    regions = find_orange_regions(bgr)
-    t_find  = (time.perf_counter() - t0) * 1000
+    t0    = time.perf_counter()
+    pills = find_signature_pills(bgr)
+    t_find = (time.perf_counter() - t0) * 1000
 
-    # Split into per-colour queues, sort largest-first, cap independently.
-    #
-    # Why separate queues?
-    # The secondary (cyan) range detects many SC HUD elements (targeting
-    # brackets, waypoints, …) that are false positives.  If we merge them
-    # into one sorted list, these large blobs push the actual badge below
-    # the max_regions cut-off and the badge is never OCR'd.
-    # By processing all orange candidates first we keep the fast path for
-    # non-Aegis ships identical to pre-1.2.3 behaviour (they rarely have
-    # cyan false positives in the scan region).
-    max_regions  = config.get("max_regions",  3)
-    max_regions2 = config.get("max_regions2", 5)    # cyan cap — higher to survive cockpit false positives
-    max_regions3 = config.get("max_regions3", 3)    # white cap
-    max_area2    = config.get("max_area2", 5000)    # reject huge cyan blobs (HUD panels)
-    max_area3    = config.get("max_area3", 5000)    # reject huge white blobs
-    n_found      = len(regions)
+    max_pills = config.get("max_pills", 6)
+    pills     = pills[:max_pills]
 
-    orange_regions = sorted(
-        [r for r in regions if r[4] == "orange"],
-        key=lambda r: r[2] * r[3], reverse=True
-    )[:max_regions]
-
-    cyan_regions = sorted(
-        # Large cyan blobs (> max_area2 px²) are SC HUD panels / brackets,
-        # not digit badges.  Exclude them so the actual badge (≈2500 px²)
-        # is not pushed out of the cap by one giant false positive.
-        [r for r in regions if r[4] == "cyan" and r[2] * r[3] <= max_area2],
-        key=lambda r: r[2] * r[3], reverse=True
-    )[:max_regions2]
-
-    white_regions = sorted(
-        [r for r in regions if r[4] == "white" and r[2] * r[3] <= max_area3],
-        key=lambda r: r[2] * r[3], reverse=True
-    )[:max_regions3]
-
-    # Orange → cyan → white; break on first lookup hit.
-    regions = orange_regions + cyan_regions + white_regions
-
-    hits          = []
+    hits:          list[tuple[str, str]] = []
     t_ocr_total    = 0.0
     t_lookup_total = 0.0
 
-    for region in regions:
-        # Unpack 5-tuple: (x, y, w, h, color_hint)
-        x, y, w, h, color_hint = region
-        pil = region_to_pil(bgr, (x, y, w, h))
-
+    for pill in pills:
         t0   = time.perf_counter()
-        text = ocr_text(pil, color_hint=color_hint)
+        text = ocr_pill(bgr, pill)
         t_ocr_total += (time.perf_counter() - t0) * 1000
 
-        if MIN_DIGITS <= len(text) <= MAX_DIGITS + 1:
-            # Clean single number from digit-only OCR
-            candidates = [text]
-        elif text:
-            # Got digits but wrong length — try wider OCR modes as fallback.
-            # psm 6 (block) on preprocessed handles multi-number panels;
-            # psm 7 on the raw image works for wider, lower-contrast labels.
-            t0       = time.perf_counter()
-            raw_pre  = pytesseract.image_to_string(
-                preprocess(pil, color_hint=color_hint), config=r"--psm 6"
-            ).strip()
-            raw_orig = pytesseract.image_to_string(
-                pil, config=r"--psm 7"
-            ).strip()
-            t_ocr_total += (time.perf_counter() - t0) * 1000
-            candidates = _extract_numbers(raw_pre + " " + raw_orig)
-        else:
-            # ocr_text() found nothing at all — skip fallback, region is empty.
-            candidates = []
+        candidates = _extract_numbers(text) if text else []
+        if text and text not in candidates:
+            candidates.append(text)
 
         for candidate in candidates:
             if not (MIN_DIGITS <= len(candidate) <= MAX_DIGITS + 1):
@@ -476,23 +373,18 @@ def scan_once(sct=None, state=None) -> list[tuple[str, str]]:
             t0     = time.perf_counter()
             result = lookup_text(candidate)
             t_lookup_total += (time.perf_counter() - t0) * 1000
-            log.debug("OCR raw='%s' -> %s", candidate, result)
+            log.debug("OCR pill=(%d,%d,%d,%d) raw='%s' -> %s", *pill, candidate, result)
             if result:
                 hits.append((candidate, result))
 
-        # Stop after first region that yields a valid lookup hit —
-        # main.py only uses hits[0] anyway.
         if hits:
             break
 
     total_ms = (time.perf_counter() - t_total) * 1000
 
     log.debug(
-        "Timing: grab=%.1fms find=%.1fms ocr=%.1fms lookup=%.1fms total=%.1fms "
-        "regions=%d/%d (orange=%d cyan=%d white=%d)",
-        t_grab, t_find, t_ocr_total, t_lookup_total, total_ms,
-        len(orange_regions) + len(cyan_regions) + len(white_regions), n_found,
-        len(orange_regions), len(cyan_regions), len(white_regions),
+        "Timing: grab=%.1fms find=%.1fms ocr=%.1fms lookup=%.1fms total=%.1fms pills=%d",
+        t_grab, t_find, t_ocr_total, t_lookup_total, total_ms, len(pills),
     )
 
     if total_ms > 1000:
@@ -514,7 +406,7 @@ def scan_once(sct=None, state=None) -> list[tuple[str, str]]:
         if _empty_scan_count == 10:
             log.warning(
                 "OCR returned empty result 10 times in a row - "
-                "check scan_region and HSV settings"
+                "check scan_region and pill detection settings"
             )
 
     return hits
