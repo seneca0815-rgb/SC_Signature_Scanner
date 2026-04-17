@@ -672,12 +672,12 @@ class TestLookupJsonIntegrity(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestConfigJsonIntegrity(unittest.TestCase):
-    """Verify the real config.json on disk has all required fields."""
+    """Verify config.example.json (the install template) has all required fields."""
 
     def setUp(self):
-        path = PROJECT_ROOT / "config.json"
+        path = PROJECT_ROOT / "config.example.json"
         if not path.exists():
-            self.skipTest("config.json not found – skipping integrity tests")
+            self.skipTest("config.example.json not found – skipping integrity tests")
         with open(path, encoding="utf-8") as f:
             self.cfg = json.load(f)
 
@@ -698,32 +698,32 @@ class TestConfigJsonIntegrity(unittest.TestCase):
                 self.assertIsInstance(region[key], int,
                     f"Scan region key '{key}' must be an integer")
 
-    def test_hsv_low_and_high_present_if_new_format(self):
-        """hsv_low/hsv_high are only required when using new scan_region format."""
-        if "scan_region" not in self.cfg:
-            self.skipTest("Legacy roi format – hsv keys not required")
-        self.assertIn("hsv_low",  self.cfg)
-        self.assertIn("hsv_high", self.cfg)
-
-    def test_hsv_values_are_lists_of_three(self):
-        if "hsv_low" not in self.cfg:
-            self.skipTest("hsv_low not present – legacy format, skipping")
-        for key in ("hsv_low", "hsv_high"):
+    def test_pill_detection_keys_present(self):
+        """Pill-anchor detection keys must be present in config.example.json."""
+        required = (
+            "pill_v_threshold", "pill_v_adaptive_offset",
+            "pill_aspect_min", "pill_aspect_max",
+            "pill_area_min", "pill_area_max",
+            "max_pills",
+        )
+        for key in required:
             with self.subTest(key=key):
-                val = self.cfg.get(key, [])
-                self.assertIsInstance(val, list)
-                self.assertEqual(len(val), 3,
-                    f"{key} must be a list of 3 values [H, S, V]")
+                self.assertIn(key, self.cfg,
+                    f"config.example.json missing pill-anchor key '{key}'")
 
-    def test_hsv_low_less_than_high(self):
-        if "hsv_low" not in self.cfg:
-            self.skipTest("hsv_low not present – legacy format, skipping")
-        low  = self.cfg.get("hsv_low",  [0, 0, 0])
-        high = self.cfg.get("hsv_high", [0, 0, 0])
-        for i in range(3):
-            with self.subTest(channel=i):
-                self.assertLessEqual(low[i], high[i],
-                    f"hsv_low[{i}] must be <= hsv_high[{i}]")
+    def test_pill_area_min_less_than_max(self):
+        """pill_area_min must be strictly less than pill_area_max."""
+        lo = self.cfg.get("pill_area_min", 0)
+        hi = self.cfg.get("pill_area_max", 0)
+        self.assertLess(lo, hi,
+            "pill_area_min must be < pill_area_max")
+
+    def test_pill_aspect_min_less_than_max(self):
+        """pill_aspect_min must be strictly less than pill_aspect_max."""
+        lo = self.cfg.get("pill_aspect_min", 0)
+        hi = self.cfg.get("pill_aspect_max", 0)
+        self.assertLess(lo, hi,
+            "pill_aspect_min must be < pill_aspect_max")
 
     def test_interval_ms_is_positive(self):
         val = self.cfg.get("interval_ms", 500)
