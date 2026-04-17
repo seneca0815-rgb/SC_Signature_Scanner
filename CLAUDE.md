@@ -70,10 +70,10 @@ pyinstaller --onefile --noconsole --name SCSigReader main.py \
 | `overlay.py` | Full OCR pipeline (capture → detect → preprocess → OCR → normalize → lookup → vote) |
 | `app_state.py` | Thread-safe shared state (paused flag, last\_signal, history, theme, config persistence) |
 | `control_panel.py` | Main control window (history, theme switcher, overlay position, help text) |
-| `overlay_window.py` | Transparent always-on-top result window |
+| `overlay_window.py` | Transparent always-on-top result window; rarity colour coding; named position presets |
 | `display_window.py` | Optional "VD-SFR1" cockpit display (slim or instrument mode) |
 | `setup_wizard.py` | First-run wizard (resolution preset selection, scan region, theme) |
-| `themes.py` | 5 built-in themes: `vargo` (default), `dark-gold`, `dark-blue`, `light`, `minimal` |
+| `themes.py` | 6 built-in themes: `vargo` (default), `dark-gold`, `dark-blue`, `cockpit`, `minimal`, `ghost` |
 | `tray_icon.py` | System tray icon via pystray (daemon thread) |
 | `lookup.json` | 163 entries: signature number → mineral name + multiplier |
 
@@ -115,7 +115,9 @@ User copies `config.example.json` → `config.json`. Key fields:
 | `fuzzy_max_distance` | Levenshtein tolerance | `1` |
 | `tesseract_cmd` | Path to `tesseract.exe` | `C:\Program Files\Tesseract-OCR\tesseract.exe` |
 | `theme` | Active colour theme | `vargo` |
-| `hotkey` | Pause/resume shortcut | `F9` |
+| `overlay_position` | Named position preset or `custom` | `custom` |
+| `alpha` | Window transparency applied via wm_attributes | `0.90` |
+| `hotkey` | Pause/resume shortcut | `scroll lock` |
 
 ## CI/CD
 

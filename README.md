@@ -56,8 +56,14 @@ of 163 known signature values.
   majority vote prevents flickering
          |
          v
+[Rarity colour coding]
+  Result text parsed for rarity keyword (Legendary/Epic/Rare/Uncommon/Common)
+  Overlay fg colour set accordingly; multi-mineral: highest rarity wins
+         |
+         v
 [tkinter overlay]
   transparent window, always on top
+  positioned via named preset (custom / top_* / upper_* / center_* / bottom_*)
   shows result, hides itself when no match found
 ```
 ## Setup
@@ -88,6 +94,19 @@ pip install mss pillow pytesseract opencv-python numpy
 ```
 ### Themes
 
+Six built-in themes. The overlay text colour changes automatically to match
+the detected mineral's rarity (Common → white, Uncommon → blue, Rare → yellow,
+Epic → gold, Legendary → purple) regardless of theme.
+
+| Theme | Background | Default text | Use case |
+|---|---|---|---|
+| `vargo` | `#1a1a2a` | Cyan | Default — Vargo Dynamics style |
+| `dark-gold` | `#111827` | Gold | Warm, classic |
+| `dark-blue` | `#0d1b2a` | Blue | Cool, subtle |
+| `cockpit` | `#071a07` | Neon green | Retro terminal / HUD look |
+| `minimal` | `#0d0d1a` | White | Compact, unobtrusive box |
+| `ghost` | transparent | White | Floating text, no background box |
+
 ![Theme Preview](theme_preview.png)
 
 ### 3. Run
@@ -116,10 +135,11 @@ python main.py --setup   # run setup wizard first
 | `fuzzy_max_distance` | Max Levenshtein distance (0 = disabled) | `1` |
 | `tesseract_cmd` | Path to Tesseract executable | `tesseract` |
 | `theme` | UI colour theme | `vargo` |
+| `overlay_position` | Named position preset (see below) or `custom` | `custom` |
+| `overlay_x/y` | Window position when `overlay_position` is `custom` | `30/30` |
+| `alpha` | Window transparency (0–1); applied on startup and theme change | `0.90` |
 | `hotkey` | Pause/resume shortcut | `scroll lock` |
 | `log_level` | Log verbosity: `DEBUG`, `INFO`, `WARNING`, `ERROR` | `INFO` |
-| `overlay_x/y` | Overlay window position | `30/30` |
-| `alpha` | Overlay transparency (0–1) | `0.88` |
 | `audio_enabled` | Enable audio feedback | `true` |
 | `audio_volume` | Master volume (0.0–1.0) | `0.5` |
 
@@ -185,7 +205,8 @@ Collisions (same signature value, different minerals) are joined with ` / `:
 | `test_icon_detection.py` | Run pill detection + OCR on fixture images; saves annotated `debug_pill_*.png` per fixture |
 | `find_roi.py` | Shows live mouse coordinates — helps locate the scan region |
 | `test_ocr.py` | Saves `1_original.png` + `2_preprocessed.png` — shows what Tesseract actually sees |
-| `generate_theme_preview.py` | Renders `theme_preview.png` from `themes.py` |
+| `generate_theme_preview.py` | Renders `theme_preview.png` — all themes with all rarity colours |
+| `generate_sounds.py` | (Re)generates `sounds/*.wav` by layering sci-fi FM effects onto voice samples |
 
 ---
 
@@ -203,7 +224,7 @@ sc_signature_reader/
 ├── tray_icon.py                ← system tray integration
 ├── audio_manager.py            ← WAV audio feedback
 ├── logger_setup.py             ← structured logging (RotatingFileHandler)
-├── themes.py                   ← 5 built-in colour themes
+├── themes.py                   ← 6 built-in colour themes
 ├── lookup.json                 ← 163 signature values
 ├── config.example.json         ← config template (copy to config.json)
 ├── requirements.txt            ← Python runtime dependencies
@@ -217,6 +238,7 @@ sc_signature_reader/
 ├── find_roi.py                 ← live mouse position helper for scan region
 ├── debug_script.py             ← screenshot region analysis
 ├── generate_theme_preview.py   ← renders theme_preview.png
+├── generate_sounds.py          ← layers sci-fi effects onto voice WAV samples
 ├── sounds/                     ← WAV files for audio feedback
 ├── .github/workflows/
 │   ├── ci.yml                  ← run tests on push/PR
