@@ -108,8 +108,8 @@ def init(config_path: Path, lookup_path: Path) -> None:
     _PILL_CLOSE_H      = config.get("pill_close_h",        5)
     _PILL_ASPECT_MIN   = config.get("pill_aspect_min",    2.0)
     _PILL_ASPECT_MAX   = config.get("pill_aspect_max",    8.0)
-    _PILL_AREA_MIN     = config.get("pill_area_min",      200)
-    _PILL_AREA_MAX     = config.get("pill_area_max",     6000)
+    _PILL_AREA_MIN     = config.get("pill_area_min",      500)
+    _PILL_AREA_MAX     = config.get("pill_area_max",     1600)
     _PILL_ICON_WIDTH   = config.get("pill_icon_width",     16)
     _PILL_TEXT_EXTEND  = config.get("pill_text_extend",   100)
     _TEXT_STRIP_HPAD   = config.get("text_strip_hpad",     6)
@@ -150,8 +150,8 @@ _PILL_CLOSE_W      = 14    # Closing-Kernel Breite (verbindet Icon und Zahl)
 _PILL_CLOSE_H      = 5     # Closing-Kernel Höhe
 _PILL_ASPECT_MIN   = 2.0   # Mindest-Aspekt (breiter als hoch)
 _PILL_ASPECT_MAX   = 8.0   # Maximal-Aspekt
-_PILL_AREA_MIN     = 200   # Mindestfläche der hellen Pixel im Cluster
-_PILL_AREA_MAX     = 6000  # Maximalgröße (kein ganzes HUD-Panel)
+_PILL_AREA_MIN     = 500   # Signatur-Pille Bbox ~1000–1400 px² (w×h)
+_PILL_AREA_MAX     = 1600  # Cockpit-Panels Bbox > 1700 px² (w×h)
 _PILL_ICON_WIDTH   = 16    # Geschätzte Icon-Breite in Pixeln (übersprungen beim OCR)
 _PILL_TEXT_EXTEND  = 100   # Pixel rechts über den Cluster hinaus (volle Zahl sichern)
 
@@ -182,19 +182,23 @@ def find_signature_pills(bgr: np.ndarray) -> list[tuple[int, int, int, int]]:
     pills: list[tuple[int, int, int, int]] = []
 
     for cnt in cnts:
-        area = cv2.contourArea(cnt)
-        if not (_PILL_AREA_MIN <= area <= _PILL_AREA_MAX):
-            continue
         x, y, w, h = cv2.boundingRect(cnt)
+        bbox_area = w * h
+        # Filterung nach Bounding-Box-Fläche (nicht Konturfläche):
+        # Cockpit-Panels haben niedrige fill-Ratio → Konturfläche < Bbox,
+        # aber Bbox ist der zuverlässigere Größen-Indikator.
+        if not (_PILL_AREA_MIN <= bbox_area <= _PILL_AREA_MAX):
+            continue
         asp = w / max(h, 1)
         if not (_PILL_ASPECT_MIN <= asp <= _PILL_ASPECT_MAX):
             continue
-        # Pille darf nicht am rechten Bildrand kleben
-        if x + w + 10 >= w_img:
-            continue
         pills.append((x, y, w, h))
 
-    pills.sort(key=lambda p: p[2] * p[3], reverse=True)
+    # Nach Nähe zur erwarteten Signatur-Pille-Größe sortieren.
+    # Alle vier getesteten Hersteller haben Pillen ~1000–1400 px² (Bbox).
+    # Dieser Target-Wert kann via config.json "pill_area_target" angepasst werden.
+    target = config.get("pill_area_target", 1200)
+    pills.sort(key=lambda p: abs(p[2] * p[3] - target))
     return pills
 
 
