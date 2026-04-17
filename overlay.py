@@ -62,11 +62,12 @@ MAX_DIGITS = 5
 # ---------------------------------------------------------------------------
 # Pill-Detektion: helle Cluster (Icon + weiße Zahl) im Signatur-Display
 # ---------------------------------------------------------------------------
-_PILL_V_THRESHOLD  = 130   # V-Kanal-Schwellwert für helle Pixel
+_PILL_V_THRESHOLD        = 130  # V-Kanal-Schwellwert (Basis)
+_PILL_V_ADAPTIVE_OFFSET  = 60   # Offset auf Median-V bei hellem Hintergrund
 _PILL_CLOSE_W      = 14    # Closing-Kernel Breite (verbindet Icon und Zahl)
 _PILL_CLOSE_H      = 5     # Closing-Kernel Höhe
 _PILL_ASPECT_MIN   = 2.0   # Mindest-Aspekt (breiter als hoch)
-_PILL_ASPECT_MAX   = 8.0   # Maximal-Aspekt
+_PILL_ASPECT_MAX   = 6.0   # Maximal-Aspekt (alle Sig-Pillen: 3.2–3.7; ≥7 = False Positive)
 _PILL_AREA_MIN     = 200   # Mindestfläche der hellen Pixel im Cluster
 _PILL_AREA_MAX     = 6000  # Maximalgröße
 _PILL_ICON_WIDTH   = 16    # Geschätzte Icon-Breite (übersprungen beim OCR)
@@ -74,7 +75,6 @@ _PILL_TEXT_EXTEND  = 100   # Pixel rechts über Cluster hinaus (volle Zahl)
 
 # OCR-Parameter
 _TEXT_STRIP_HPAD   = 6     # vertikale Pufferzone um den Cluster
-_WHITE_THRESHOLD   = 140   # Graustufen-Schwellwert: Pixel darüber = Text
 _TARGET_OCR_HEIGHT = 60    # Zielhöhe für Tesseract
 
 _empty_scan_count: int = 0   # consecutive empty-OCR counter
@@ -83,8 +83,8 @@ _empty_scan_count: int = 0   # consecutive empty-OCR counter
 def init(config_path: Path, lookup_path: Path) -> None:
     """Load config and lookup, apply theme, initialise all module globals."""
     global config, lookup, ROI, INTERVAL, FUZZY_MAX_DIST
-    global _TEXT_STRIP_HPAD, _WHITE_THRESHOLD, _TARGET_OCR_HEIGHT
-    global _PILL_V_THRESHOLD, _PILL_CLOSE_W, _PILL_CLOSE_H
+    global _TEXT_STRIP_HPAD, _TARGET_OCR_HEIGHT
+    global _PILL_V_THRESHOLD, _PILL_V_ADAPTIVE_OFFSET, _PILL_CLOSE_W, _PILL_CLOSE_H
     global _PILL_ASPECT_MIN, _PILL_ASPECT_MAX, _PILL_AREA_MIN, _PILL_AREA_MAX
     global _PILL_ICON_WIDTH, _PILL_TEXT_EXTEND
 
@@ -103,18 +103,18 @@ def init(config_path: Path, lookup_path: Path) -> None:
     INTERVAL       = config.get("interval_ms", 500) / 1000
     FUZZY_MAX_DIST = config.get("fuzzy_max_distance", 1)
 
-    _PILL_V_THRESHOLD  = config.get("pill_v_threshold",   130)
-    _PILL_CLOSE_W      = config.get("pill_close_w",       14)
-    _PILL_CLOSE_H      = config.get("pill_close_h",        5)
-    _PILL_ASPECT_MIN   = config.get("pill_aspect_min",    2.0)
-    _PILL_ASPECT_MAX   = config.get("pill_aspect_max",    8.0)
-    _PILL_AREA_MIN     = config.get("pill_area_min",      500)
-    _PILL_AREA_MAX     = config.get("pill_area_max",     1600)
-    _PILL_ICON_WIDTH   = config.get("pill_icon_width",     16)
-    _PILL_TEXT_EXTEND  = config.get("pill_text_extend",   100)
-    _TEXT_STRIP_HPAD   = config.get("text_strip_hpad",     6)
-    _WHITE_THRESHOLD   = config.get("white_threshold",   140)
-    _TARGET_OCR_HEIGHT = config.get("target_ocr_height",  60)
+    _PILL_V_THRESHOLD       = config.get("pill_v_threshold",        130)
+    _PILL_V_ADAPTIVE_OFFSET = config.get("pill_v_adaptive_offset",   60)
+    _PILL_CLOSE_W           = config.get("pill_close_w",             14)
+    _PILL_CLOSE_H           = config.get("pill_close_h",              5)
+    _PILL_ASPECT_MIN        = config.get("pill_aspect_min",          2.0)
+    _PILL_ASPECT_MAX        = config.get("pill_aspect_max",          6.0)
+    _PILL_AREA_MIN          = config.get("pill_area_min",            500)
+    _PILL_AREA_MAX          = config.get("pill_area_max",           1600)
+    _PILL_ICON_WIDTH        = config.get("pill_icon_width",           16)
+    _PILL_TEXT_EXTEND       = config.get("pill_text_extend",         100)
+    _TEXT_STRIP_HPAD        = config.get("text_strip_hpad",            6)
+    _TARGET_OCR_HEIGHT      = config.get("target_ocr_height",        60)
 
 
 # ---------------------------------------------------------------------------
@@ -145,11 +145,12 @@ def capture_roi(sct: mss.mss = None) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 # Helle Cluster-Erkennungsparameter (konfigurierbar via config.json)
-_PILL_V_THRESHOLD  = 130   # V-Kanal-Schwellwert für helle Pixel
+_PILL_V_THRESHOLD        = 130  # V-Kanal-Schwellwert (Basis)
+_PILL_V_ADAPTIVE_OFFSET  = 60   # Offset auf Median-V bei hellem Hintergrund
 _PILL_CLOSE_W      = 14    # Closing-Kernel Breite (verbindet Icon und Zahl)
 _PILL_CLOSE_H      = 5     # Closing-Kernel Höhe
 _PILL_ASPECT_MIN   = 2.0   # Mindest-Aspekt (breiter als hoch)
-_PILL_ASPECT_MAX   = 8.0   # Maximal-Aspekt
+_PILL_ASPECT_MAX   = 6.0   # Maximal-Aspekt (alle Sig-Pillen: 3.2–3.7; ≥7 = False Positive)
 _PILL_AREA_MIN     = 500   # Signatur-Pille Bbox ~1000–1400 px² (w×h)
 _PILL_AREA_MAX     = 1600  # Cockpit-Panels Bbox > 1700 px² (w×h)
 _PILL_ICON_WIDTH   = 16    # Geschätzte Icon-Breite in Pixeln (übersprungen beim OCR)
@@ -172,7 +173,12 @@ def find_signature_pills(bgr: np.ndarray) -> list[tuple[int, int, int, int]]:
     val    = hsv[:, :, 2]
     h_img, w_img = bgr.shape[:2]
 
-    _, bright = cv2.threshold(val, _PILL_V_THRESHOLD, 255, cv2.THRESH_BINARY)
+    # Adaptiver Schwellwert: bei hellem Hintergrund (z.B. Argo/blauer Nebel)
+    # liegt der Median-V nahe am Basiswert → Schwellwert automatisch erhöhen.
+    median_v = float(np.median(val))
+    v_thresh = max(_PILL_V_THRESHOLD, int(median_v) + _PILL_V_ADAPTIVE_OFFSET)
+    log.debug("find_signature_pills: median_V=%.0f v_thresh=%d", median_v, v_thresh)
+    _, bright = cv2.threshold(val, v_thresh, 255, cv2.THRESH_BINARY)
     kernel = cv2.getStructuringElement(
         cv2.MORPH_RECT, (_PILL_CLOSE_W, _PILL_CLOSE_H)
     )
@@ -259,8 +265,11 @@ def ocr_pill(bgr: np.ndarray, pill: tuple[int, int, int, int]) -> str:
                            (round(sw * scale), round(sh * scale)),
                            interpolation=cv2.INTER_LANCZOS4)
 
-    gray     = cv2.cvtColor(strip, cv2.COLOR_BGR2GRAY)
-    _, binary = cv2.threshold(gray, _WHITE_THRESHOLD, 255, cv2.THRESH_BINARY)
+    # Blue-Kanal + Otsu-Schwellwert: funktioniert für alle Hintergründe.
+    # Weiße/helle Pixel haben hohe B-Werte unabhängig von der HUD-Farbe.
+    # Otsu trennt lokal Text von Hintergrund — auch bei hellem Argo-Nebel.
+    blue     = strip[:, :, 0]
+    _, binary = cv2.threshold(blue, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     inverted  = cv2.bitwise_not(binary)
 
     # Fast-reject: zu wenig Text-Pixel
@@ -314,6 +323,7 @@ def _extract_numbers(text: str) -> list[str]:
 
 
 def lookup_text(raw: str) -> str | None:
+    """Full lookup: exact → substring → fuzzy."""
     norm = raw.strip().lower()
     for key, val in lookup.items():
         if key.lower() == norm: return val
@@ -332,6 +342,22 @@ def lookup_text(raw: str) -> str | None:
 
     if best_dist <= FUZZY_MAX_DIST:
         return f"~  {best_val}  (Fuzzy Δ={best_dist})"
+    return None
+
+
+def lookup_text_strict(raw: str) -> str | None:
+    """Strict lookup: exact + substring only — no fuzzy.
+
+    Used in the per-pill hot path so that a Levenshtein Δ=1 false positive
+    on an early (wrong) pill candidate does not stop the search before the
+    correct pill is tried.  Fuzzy is applied as a post-loop fallback in
+    scan_once() after all pills have been exhausted.
+    """
+    norm = raw.strip().lower()
+    for key, val in lookup.items():
+        if key.lower() == norm: return val
+    for key, val in lookup.items():
+        if key.lower() in norm: return val
     return None
 
 
@@ -358,7 +384,8 @@ def scan_once(sct=None, state=None) -> list[tuple[str, str]]:
     max_pills = config.get("max_pills", 6)
     pills     = pills[:max_pills]
 
-    hits:          list[tuple[str, str]] = []
+    hits:              list[tuple[str, str]] = []
+    fuzzy_candidates:  list[str]             = []   # all OCR strings for post-loop fuzzy
     t_ocr_total    = 0.0
     t_lookup_total = 0.0
 
@@ -374,8 +401,11 @@ def scan_once(sct=None, state=None) -> list[tuple[str, str]]:
         for candidate in candidates:
             if not (MIN_DIGITS <= len(candidate) <= MAX_DIGITS + 1):
                 continue
+            fuzzy_candidates.append(candidate)
             t0     = time.perf_counter()
-            result = lookup_text(candidate)
+            # Strict (no fuzzy) in the hot path — prevents a Δ=1 false positive
+            # on an early pill from stopping the search before the correct pill.
+            result = lookup_text_strict(candidate)
             t_lookup_total += (time.perf_counter() - t0) * 1000
             log.debug("OCR pill=(%d,%d,%d,%d) raw='%s' -> %s", *pill, candidate, result)
             if result:
@@ -383,6 +413,18 @@ def scan_once(sct=None, state=None) -> list[tuple[str, str]]:
 
         if hits:
             break
+
+    # Post-loop fuzzy fallback: only reached when no exact/substring match found.
+    if not hits and fuzzy_candidates:
+        t0 = time.perf_counter()
+        for candidate in fuzzy_candidates:
+            result = lookup_text(candidate)   # full lookup incl. fuzzy
+            t_lookup_total += (time.perf_counter() - t0) * 1000
+            if result:
+                hits.append((candidate, result))
+                log.debug("Fuzzy fallback: raw='%s' -> %s", candidate, result)
+                break
+            t0 = time.perf_counter()
 
     total_ms = (time.perf_counter() - t_total) * 1000
 
