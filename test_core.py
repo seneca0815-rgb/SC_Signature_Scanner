@@ -758,7 +758,7 @@ if __name__ == "__main__":
         TestExtractNumbers,
         TestNormalize,
         TestLookupText,
-        TestPreprocess,
+        TestPillDetection,
         TestLoadJson,
         TestLookupJsonIntegrity,
         TestConfigJsonIntegrity,
