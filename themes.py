@@ -40,4 +40,12 @@ THEMES = {
         "alpha":       0.90,
         "example":     "ℹ  Quantainium (3x)  ·  Legendary",
     },
+    "ghost": {
+        "bg_color":    "#000000",
+        "fg_color":    "#ffffff",
+        "font_family": "Consolas",
+        "font_size":   13,
+        "alpha":       0.55,
+        "example":     "ℹ  Quantainium (3x)  ·  Legendary",
+    },
 }

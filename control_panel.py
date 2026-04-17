@@ -12,6 +12,7 @@ import importlib.util
 
 from app_state import AppState
 from logger_setup import get_logger
+from overlay_window import POSITION_PRESETS
 
 log = get_logger()
 
@@ -212,6 +213,28 @@ class ControlPanel:
             padx=8, pady=4)
         self._theme_preview.pack(side="right")
         self._refresh_theme_preview()
+
+        self._build_divider(w)
+
+        # ── Overlay position ─────────────────────────────────────────────
+        self._build_section(w, "OVERLAY POSITION")
+
+        pos_row = tk.Frame(w, bg=C_BG)
+        pos_row.pack(fill="x", padx=16, pady=(0, 4))
+
+        self._position_var = tk.StringVar(
+            value=self._config.get("overlay_position", "custom"))
+
+        pos_combo = ttk.Combobox(
+            pos_row,
+            textvariable=self._position_var,
+            values=POSITION_PRESETS,
+            state="readonly",
+            style="Vargo.TCombobox",
+            font=("Courier New", 11),
+            width=18)
+        pos_combo.pack(side="left")
+        pos_combo.bind("<<ComboboxSelected>>", self._on_position_change)
 
         self._build_divider(w)
 
@@ -430,6 +453,12 @@ class ControlPanel:
             self._state.set_theme(name)
             self._overlay.apply_theme(theme)
             self._refresh_theme_preview()
+
+    def _on_position_change(self, _event=None):
+        preset = self._position_var.get()
+        self._config["overlay_position"] = preset
+        self._overlay.set_position(preset)
+        log.info("Overlay position changed to: %s", preset)
 
     def _on_close(self):
         """Minimise to tray instead of closing."""

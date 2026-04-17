@@ -28,6 +28,8 @@
   "tesseract_cmd": "C:\\Program Files\\Tesseract-OCR\\tesseract.exe",
 
   "theme": "vargo",
+  "_overlay_position": "Preset: custom | top_left | top_center | top_right | center_left | center | center_right | bottom_left | bottom_center | bottom_right",
+  "overlay_position": "custom",
   "hotkey": "scroll lock",
 
   "_logging": "Log level: DEBUG, INFO, WARNING, ERROR",
