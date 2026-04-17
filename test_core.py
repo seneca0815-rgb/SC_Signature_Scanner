@@ -421,50 +421,136 @@ class TestLookupText(unittest.TestCase):
 # 6. preprocess()
 # ---------------------------------------------------------------------------
 
-class TestPreprocess(unittest.TestCase):
+class TestPillDetection(unittest.TestCase):
+    """Tests for find_signature_pills() and ocr_pill() (pill-anchor strategy).
 
-    def _make_image(self, w=50, h=20, color=(200, 120, 30)):
-        from PIL import Image
-        img = Image.new("RGB", (w, h), color)
+    cv2 and numpy are mocked globally.  These tests configure mock return
+    values at the granularity needed to exercise the Python-level filter /
+    sort logic without running real OpenCV pixel operations.
+    """
+
+    def setUp(self):
+        """Configure cv2 mock defaults shared by all pill tests."""
+        import cv2 as cv2_mock
+        import numpy as np_mock
+        # threshold() returns (retval, binary_image) — must be a 2-tuple
+        self._mock_binary = MagicMock()
+        cv2_mock.threshold.return_value = (127, self._mock_binary)
+        cv2_mock.morphologyEx.return_value = MagicMock()
+        cv2_mock.getStructuringElement.return_value = MagicMock()
+        # bitwise_not return value needs __lt__ for the fast-reject check
+        # `np.count_nonzero(inverted < 50)` evaluates `inverted < 50` first
+        mock_inverted = MagicMock()
+        mock_inverted.__lt__ = MagicMock(return_value=MagicMock())
+        cv2_mock.bitwise_not.return_value = mock_inverted
+        cv2_mock.resize.return_value = MagicMock()
+        # Median → low value so adaptive threshold stays at base
+        np_mock.median.return_value = 50.0
+        # count_nonzero → large value so OCR fast-reject passes
+        np_mock.count_nonzero.return_value = 100
+
+    def _make_mock_bgr(self):
+        img = MagicMock()
+        img.shape = (100, 200, 3)
         return img
 
-    def test_output_is_grayscale(self):
-        from PIL import Image
-        img    = self._make_image()
-        result = ov.preprocess(img)
-        self.assertEqual(result.mode, "L",
-            "preprocess() must return a grayscale image")
+    # ---- find_signature_pills -----------------------------------------------
 
-    def test_output_is_larger_than_input(self):
-        img    = self._make_image(50, 20)
-        result = ov.preprocess(img)
-        self.assertGreater(result.width,  50)
-        self.assertGreater(result.height, 20)
+    def test_find_pills_no_contours_returns_empty_list(self):
+        """When cv2.findContours finds nothing, the result must be []."""
+        import cv2 as cv2_mock
+        cv2_mock.findContours.return_value = ([], None)
+        pills = ov.find_signature_pills(self._make_mock_bgr())
+        self.assertIsInstance(pills, list)
+        self.assertEqual(pills, [])
 
-    def test_output_upscale_factor(self):
-        """Image must be at least 2× the input in each dimension."""
-        img    = self._make_image(40, 10)
-        result = ov.preprocess(img)
-        self.assertGreaterEqual(result.width,  40 * 2)
-        self.assertGreaterEqual(result.height, 10 * 2)
+    def test_find_pills_filters_out_wrong_aspect(self):
+        """Contours with aspect ratio outside [aspect_min, aspect_max] are rejected."""
+        import cv2 as cv2_mock
+        mock_cnt = MagicMock()
+        cv2_mock.findContours.return_value = ([mock_cnt], None)
+        cv2_mock.boundingRect.return_value = (0, 0, 10, 10)  # asp=1.0 → fails
+        pills = ov.find_signature_pills(self._make_mock_bgr())
+        self.assertEqual(pills, [], "aspect-failing contour must be filtered")
 
-    def test_rgb_input_accepted(self):
-        """preprocess() must not raise on a standard RGB image."""
-        from PIL import Image
-        img = Image.new("RGB", (60, 20), (180, 90, 20))
-        try:
-            ov.preprocess(img)
-        except Exception as exc:
-            self.fail(f"preprocess() raised {exc} on RGB input")
+    def test_find_pills_filters_out_wrong_area(self):
+        """Contours with bbox area outside [area_min, area_max] are rejected."""
+        import cv2 as cv2_mock
+        mock_cnt = MagicMock()
+        cv2_mock.findContours.return_value = ([mock_cnt], None)
+        cv2_mock.boundingRect.return_value = (0, 0, 200, 200)  # 40000 px² → fails
+        pills = ov.find_signature_pills(self._make_mock_bgr())
+        self.assertEqual(pills, [], "over-sized contour must be filtered")
 
-    def test_small_image_accepted(self):
-        """Very small images (1×1) must not crash preprocess()."""
-        from PIL import Image
-        img = Image.new("RGB", (1, 1), (200, 100, 20))
-        try:
-            ov.preprocess(img)
-        except Exception as exc:
-            self.fail(f"preprocess() raised {exc} on 1×1 image")
+    def test_find_pills_passing_contour_included(self):
+        """A contour with valid area and aspect must appear in the result."""
+        import cv2 as cv2_mock
+        mock_cnt = MagicMock()
+        cv2_mock.findContours.return_value = ([mock_cnt], None)
+        cv2_mock.boundingRect.return_value = (10, 5, 60, 20)  # asp=3.0, area=1200 ✓
+        pills = ov.find_signature_pills(self._make_mock_bgr())
+        self.assertEqual(len(pills), 1)
+        self.assertEqual(pills[0], (10, 5, 60, 20))
+
+    def test_find_pills_sorted_by_closeness_to_target(self):
+        """Pills must be sorted by |w*h - target_area|, closest first."""
+        import cv2 as cv2_mock
+        cnt_a, cnt_b = MagicMock(), MagicMock()
+        cv2_mock.findContours.return_value = ([cnt_a, cnt_b], None)
+        # cnt_a: 50×22=1100 px² → |1100-1200|=100
+        # cnt_b: 60×20=1200 px² → |1200-1200|=0   ← should rank first
+        cv2_mock.boundingRect.side_effect = [
+            (0,   0, 50, 22),
+            (100, 0, 60, 20),
+        ]
+        pills = ov.find_signature_pills(self._make_mock_bgr())
+        self.assertEqual(len(pills), 2)
+        self.assertEqual(pills[0][2:], (60, 20),
+                         "pill closest to target area must be first")
+
+    # ---- ocr_pill -----------------------------------------------------------
+
+    def _make_mock_bgr_with_slices(self):
+        """BGR mock where slicing also returns a shape-bearing mock."""
+        img = MagicMock()
+        img.shape = (100, 200, 3)
+        # bgr[y1:y2, x1:x2] returns a strip-like mock
+        strip_mock = MagicMock()
+        strip_mock.shape = (33, 160, 3)
+        # strip[:,:,0] returns a channel mock for blue_otsu
+        channel_mock = MagicMock()
+        strip_mock.__getitem__ = MagicMock(return_value=channel_mock)
+        img.__getitem__ = MagicMock(return_value=strip_mock)
+        return img
+
+    def _ocr_pill_patches(self, tess_return):
+        """Context manager stack: patches _find_text_start_col and Image.fromarray."""
+        import cv2 as cv2_mock
+        import pytesseract as tess_mock
+        tess_mock.image_to_string.return_value = tess_return
+        resized = MagicMock()
+        resized.shape = (60, 480, 3)
+        resized.__getitem__ = MagicMock(return_value=MagicMock())
+        cv2_mock.resize.return_value = resized
+        return (
+            patch.object(ov, "_find_text_start_col", return_value=0),
+            patch("overlay.Image.fromarray", return_value=MagicMock()),
+        )
+
+    def test_ocr_pill_returns_string(self):
+        """ocr_pill() must always return a str (never None or raise)."""
+        p1, p2 = self._ocr_pill_patches("15600")
+        with p1, p2:
+            result = ov.ocr_pill(self._make_mock_bgr_with_slices(), (10, 10, 60, 20))
+        self.assertIsInstance(result, str)
+
+    def test_ocr_pill_returns_digits_only(self):
+        """ocr_pill() must strip all non-digit characters from Tesseract output."""
+        p1, p2 = self._ocr_pill_patches("1 5,600\n")
+        with p1, p2:
+            result = ov.ocr_pill(self._make_mock_bgr_with_slices(), (10, 10, 60, 20))
+        self.assertRegex(result, r"^\d*$",
+                         "ocr_pill() must return digits only or empty string")
 
 
 # ---------------------------------------------------------------------------

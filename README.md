@@ -13,10 +13,14 @@ the corresponding mineral name with multiplier.
 ## Concept
 
 The overlay continuously analyses a configurable screen region.
-Instead of reading a fixed pixel area (ROI), it actively searches for
-orange pixel clusters in the image – exactly the colour SC uses to render
-signature numbers. Each found cluster is passed through OCR and matched
-against a lookup table of 155 known signature values.
+It searches for the **signature display pill** — the small dark rounded rectangle
+that every SC ship HUD uses to show the signature number next to a coloured
+Location-Pin icon. The detection is manufacturer-independent: it works on
+Aegis, Anvil, Krueger, RSI, and Argo ships regardless of HUD colour or
+background (dark space, coloured nebula, planet surface).
+
+Each detected pill is passed through OCR and matched against a lookup table
+of 163 known signature values.
 
 ---
 
@@ -27,45 +31,29 @@ against a lookup table of 155 known signature values.
          |
          | screenshot every 500ms (mss)
          v
-[Colour detection – OpenCV]
-  HSV mask isolates orange pixels
-  morphology closes gaps in glyphs
-  contours → bounding boxes
-         |
-         | filtered by: area >= min_area
-         |              aspect ratio 2.0–4.0
-         v
-[Preprocessing – Pillow]
-  4× upscale
-  R+G−B → isolate orange channel
-  maximise contrast
-  threshold → black / white
-  invert → black text on white
+[Pill detection – OpenCV]
+  Adaptive V-channel threshold isolates bright pixels
+  (threshold auto-adjusts for bright backgrounds like nebula/planet)
+  Morphological closing bridges icon ↔ digit gaps → single blob
+  Contours → bounding boxes filtered by area (500–1600 px²) and aspect (2–6)
+  Sorted by closeness to target area 1200 px²
          |
          v
-[OCR – Tesseract]
-  psm 7 (single text line)
-  whitelist: digits 0–9 only
+[OCR per pill candidate – Blue channel + Otsu]
+  Crop strip around pill  →  scale to 60 px height
+  Blue channel + Otsu threshold → invert (black text on white)
+  Tesseract PSM 7, digits 0–9 only
          |
-         | raw text e.g. "16,840"
-         v
-[Normalisation]
-  strip thousands separators
-  fix common OCR mix-ups:
-    l/I/| → 1,  O/o → 0,  S → 5,  B → 8,  Z → 2,  G → 6
-         |
-         | normalised digit string e.g. "16840"
+         | raw digit string e.g. "15600"
          v
 [Lookup – three-stage]
-  1. Exact match         "16840" == "16840"
-  2. Substring match     "16840" in recognised text
-  3. Fuzzy (Levenshtein) edit distance <= fuzzy_max_distance
+  Hot path (per pill):  1. Exact match   2. Substring match
+  Post-loop fallback:   3. Fuzzy Levenshtein (dist ≤ fuzzy_max_distance)
          |
-         | result e.g. "Quartz (4x) · Common"
+         | result e.g. "Torite (4x) · Uncommon"
          v
 [Voting over 3 frames]
   majority vote prevents flickering
-  caused by unstable OCR output
          |
          v
 [tkinter overlay]
@@ -114,14 +102,15 @@ python main.py --setup   # run setup wizard first
 
 | Key | Description | Default |
 |---|---|---|
-| `scan_region` | Screen area to scan | full screen |
-| `hsv_low` | Lower HSV bound for orange | `[5, 80, 80]` |
-| `hsv_high` | Upper HSV bound for orange | `[35, 255, 255]` |
-| `min_area` | Minimum region area (px²) | `120` |
-| `aspect_min` | Minimum width/height ratio | `2.0` |
-| `aspect_max` | Maximum width/height ratio | `6.0` |
-| `region_padding` | Pixel padding around detected region | `8` |
-| `max_regions` | Max orange regions to OCR per cycle (largest first) | `3` |
+| `scan_region` | Screen area to scan | required |
+| `pill_v_threshold` | Base V-channel threshold for bright pixel detection | `130` |
+| `pill_v_adaptive_offset` | Added to median-V for bright backgrounds (nebula/planet) | `60` |
+| `pill_area_min` | Minimum pill bounding-box area (px²) | `500` |
+| `pill_area_max` | Maximum pill bounding-box area (px²) | `1600` |
+| `pill_aspect_min` | Minimum width/height ratio | `2.0` |
+| `pill_aspect_max` | Maximum width/height ratio | `6.0` |
+| `pill_area_target` | Target area for ranking (closest first) | `1200` |
+| `max_pills` | Max pill candidates to OCR per cycle | `3` |
 | `vote_frames` | Number of frames for majority vote | `3` |
 | `interval_ms` | Scan frequency in milliseconds | `500` |
 | `fuzzy_max_distance` | Max Levenshtein distance (0 = disabled) | `1` |
@@ -139,12 +128,9 @@ python main.py --setup   # run setup wizard first
 ```json
 {
   "scan_region": { "top": 130, "left": 200, "width": 2160, "height": 900 },
-  "hsv_low":  [5,  80,  80],
-  "hsv_high": [35, 255, 255],
-  "min_area": 120,
-  "aspect_min": 2.0,
-  "aspect_max": 4.0,
-  "region_padding": 8,
+  "pill_v_threshold": 130,
+  "pill_aspect_max": 6.0,
+  "max_pills": 3,
   "vote_frames": 3,
   "interval_ms": 500,
   "fuzzy_max_distance": 1,
@@ -196,10 +182,9 @@ Collisions (same signature value, different minerals) are joined with ` / `:
 
 | Script | Purpose |
 |---|---|
-| `calibrate_hsv.py` | Click on a signature pixel in a screenshot (or live capture) to get exact HSV values and suggested `hsv_low` / `hsv_high` config |
+| `test_icon_detection.py` | Run pill detection + OCR on fixture images; saves annotated `debug_pill_*.png` per fixture |
 | `find_roi.py` | Shows live mouse coordinates — helps locate the scan region |
 | `test_ocr.py` | Saves `1_original.png` + `2_preprocessed.png` — shows what Tesseract actually sees |
-| `debug_script.py` | Analyses saved screenshots for detected orange regions |
 | `generate_theme_preview.py` | Renders `theme_preview.png` from `themes.py` |
 
 ---
@@ -283,24 +268,26 @@ The **LOG** button in the Control Panel opens this folder directly.
 ## Troubleshooting
 
 **Overlay does not appear**  
-→ Enable `"log_level": "DEBUG"` and check the log file for OCR output  
-→ Run `test_ocr.py` and inspect `2_preprocessed.png` to see what Tesseract receives  
+→ Enable `"log_level": "DEBUG"` and check `pills=N` in timing lines  
+→ Drop a HUD screenshot into `test_fixtures/<Ship>/detail.png` and run `python test_icon_detection.py`  
+→ Inspect the saved `debug_pill_detail.png` to see which pills were detected  
 
 **Wrong matches / flickering**  
 → Increase `vote_frames` (e.g. `5`)  
-→ Tighten `scan_region` around the signature area  
-→ Use stricter `min_area` and `aspect_min/max` values  
+→ Tighten `scan_region` to exclude large bright UI panels  
 
-**OCR detects nothing**  
-→ Enable DEBUG logging and check if regions are found (`regions=X/Y` in timing lines)  
-→ If `regions=0/0` every cycle: run `calibrate_hsv.py` to get the correct HSV values for your screen  
-→ Run `test_ocr.py` to inspect the preprocessed image  
+**Pill not found (pills=0 every cycle)**  
+→ Check `median_V` in DEBUG log — if > 100, try lowering `pill_v_adaptive_offset`  
+→ The scan region may be outside the game viewport; use `find_roi.py` to re-calibrate  
+
+**Too many false pill candidates (pills=6 every cycle)**  
+→ Reduce `pill_aspect_max` (e.g. `5.0`) to filter elongated false positives  
+→ Tighten `scan_region` to exclude bright cockpit panel areas  
 
 **Slow scan cycles (> 1000 ms)**  
 → Enable DEBUG logging — the PERFORMANCE panel shows avg/last cycle time  
-→ Reduce `max_regions` (e.g. `2`) to limit Tesseract calls per cycle  
-→ Check `regions=X/Y`: if X is always at the cap, many false orange regions exist — tighten `scan_region`  
+→ Reduce `max_pills` (e.g. `2`) to limit Tesseract calls per cycle  
 
 **Different resolution or FOV**  
 → Adjust `scan_region` (see reference table above)  
-→ Colour detection itself is resolution- and FOV-independent
+→ Pill detection is resolution- and HUD-colour-independent
