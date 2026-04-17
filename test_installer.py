@@ -25,10 +25,15 @@ TESSERACT_PATH = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
 # Keys whose values must survive the patch completely unchanged.
 PRESERVED_KEYS = [
-    "scan_region", "hsv_low", "hsv_high", "min_area", "aspect_min",
-    "aspect_max", "region_padding", "vote_frames", "interval_ms",
-    "fuzzy_max_distance", "theme", "hotkey", "overlay_x", "overlay_y",
-    "alpha", "bg_color", "fg_color", "font_family", "font_size", "wrap_width",
+    "scan_region",
+    "pill_v_threshold", "pill_v_adaptive_offset",
+    "pill_aspect_min", "pill_aspect_max",
+    "pill_area_min", "pill_area_max",
+    "max_pills",
+    "vote_frames", "interval_ms", "fuzzy_max_distance",
+    "theme", "overlay_position", "hotkey",
+    "overlay_x", "overlay_y", "alpha",
+    "bg_color", "fg_color", "font_family", "font_size", "wrap_width",
 ]
 
 
