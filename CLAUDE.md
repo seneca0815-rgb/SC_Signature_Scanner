@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Project Does
 
-SC Signature Reader is a ToS-compliant screen-OCR overlay for Star Citizen. It detects orange signature numbers on-screen, looks them up in a mineral database, and displays the matched mineral + multiplier in an always-on-top overlay. No memory reading or DLL injection — pure screen analysis.
+SC Signature Reader is a ToS-compliant screen-OCR overlay for Star Citizen. It detects the signature display pill in the HUD (manufacturer-independent — works for Aegis, Anvil, Krueger, RSI, Argo), reads the signature number via OCR, looks it up in a mineral database, and displays the matched mineral + multiplier in an always-on-top overlay. No memory reading or DLL injection — pure screen analysis.
 
 ## Common Commands
 
@@ -49,12 +49,15 @@ pyinstaller --onefile --noconsole --name SCSigReader main.py \
 ```
 [Game Screen]
   → mss captures ROI (500 ms interval)
-  → OpenCV HSV mask isolates orange pixels
-  → Contours → bounding boxes (area ≥ min_area, aspect 2.0–4.0)
-  → Pillow: 4× upscale, R+G−B channel, maximize contrast, threshold, invert
-  → Tesseract PSM 7 (single line, digits 0–9 only)
-  → normalize(): strip thousands separator, fix OCR mix-ups (l/I/|→1, O→0, S→5, B→8, Z→2, G→6)
-  → 3-stage lookup: exact → substring → fuzzy Levenshtein (dist ≤ fuzzy_max_distance)
+  → find_signature_pills(): adaptive V-threshold (max(base, median_V + offset))
+      morphological closing → contours → bbox filter (area 500–1600 px², aspect 2–6)
+      sort by |area − 1200 px²| (closest to signature pill size first)
+  → ocr_pill() per candidate (up to max_pills=3):
+      crop strip + scale to 60 px height
+      Blue channel + Otsu threshold → invert (black text on white)
+      Tesseract PSM 7 (single line, digits 0–9 only)
+  → lookup_text_strict() in hot path (exact + substring only)
+      fuzzy Levenshtein fallback after all pills exhausted
   → majority voting over N frames (default 3) to suppress flicker
   → OverlayWindow / DisplayWindow shows result
 ```
@@ -101,9 +104,12 @@ User copies `config.example.json` → `config.json`. Key fields:
 | Key | Purpose | Typical Value (1440p) |
 |-----|---------|----------------------|
 | `scan_region` | Screen area to analyse | `{top:130,left:200,width:2160,height:900}` |
-| `hsv_low/high` | Orange detection HSV bounds | `[5,80,80]` / `[35,255,255]` |
-| `min_area` | Minimum contour area | `120` |
-| `aspect_min/max` | Contour aspect ratio filter | `2.0` / `4.0` |
+| `pill_v_threshold` | Base V-channel brightness threshold | `130` |
+| `pill_v_adaptive_offset` | Auto-raise threshold on bright backgrounds | `60` |
+| `pill_area_min/max` | Pill bounding-box area filter (px²) | `500` / `1600` |
+| `pill_aspect_min/max` | Pill aspect ratio filter | `2.0` / `6.0` |
+| `pill_area_target` | Target area for candidate ranking | `1200` |
+| `max_pills` | Max candidates to OCR per cycle | `3` |
 | `vote_frames` | Frames required for majority vote | `3` |
 | `interval_ms` | Scan frequency | `500` |
 | `fuzzy_max_distance` | Levenshtein tolerance | `1` |
