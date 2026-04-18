@@ -22,12 +22,13 @@ RARITY_COLOURS = {
 _RARITY_PRIORITY = ["Legendary", "Epic", "Rare", "Uncommon", "Common"]
 
 
-def _rarity_colour(text: str, default: str) -> str:
-    """Return the highest-priority rarity colour found in *text*, or *default*."""
+def _split_rarity(text: str) -> tuple[str, str, str]:
+    """Split *text* around the first rarity keyword. Returns (before, rarity, after)."""
     for rarity in _RARITY_PRIORITY:
-        if rarity in text:
-            return RARITY_COLOURS[rarity]
-    return default
+        idx = text.find(rarity)
+        if idx >= 0:
+            return text[:idx], rarity, text[idx + len(rarity):]
+    return text, "", ""
 
 
 # ---------------------------------------------------------------------------
@@ -133,18 +134,17 @@ class OverlayWindow:
         alpha = float(config.get("alpha", 0.90))
         self._win.wm_attributes("-alpha", alpha)
 
-        self._label = tk.Label(
-            self._win,
-            text="",
-            bg=config.get("bg_color",    "#1a1a2a"),
-            fg=self._fg_color,
-            font=(config.get("font_family", "Consolas"),
-                  config.get("font_size",   13)),
-            padx=12, pady=8,
-            wraplength=config.get("wrap_width", 380),
-            justify="left",
-        )
-        self._label.pack()
+        _bg   = config.get("bg_color",    "#1a1a2a")
+        _font = (config.get("font_family", "Consolas"),
+                 config.get("font_size",   13))
+        self._frame = tk.Frame(self._win, bg=_bg, padx=12, pady=8)
+        self._frame.pack()
+        _lbl_kw = dict(bg=_bg, fg=self._fg_color, font=_font, padx=0, pady=0)
+        self._lbl_pre    = tk.Label(self._frame, **_lbl_kw)
+        self._lbl_rarity = tk.Label(self._frame, **_lbl_kw)
+        self._lbl_post   = tk.Label(self._frame, **_lbl_kw)
+        for _lbl in (self._lbl_pre, self._lbl_rarity, self._lbl_post):
+            _lbl.pack(side=tk.LEFT)
 
         # Initial position (custom preset uses overlay_x/y)
         self._win.geometry(f"+{self._custom_x}+{self._custom_y}")
@@ -199,8 +199,13 @@ class OverlayWindow:
             return
         self._current_text = text
         if text:
-            colour = _rarity_colour(text, self._fg_color)
-            self._label.config(text=text, fg=colour)
+            pre, rarity, post = _split_rarity(text)
+            self._lbl_pre.config(text=pre, fg=self._fg_color)
+            self._lbl_rarity.config(
+                text=rarity,
+                fg=RARITY_COLOURS[rarity] if rarity else self._fg_color,
+            )
+            self._lbl_post.config(text=post, fg=self._fg_color)
             self._win.deiconify()
             self._reposition()
         else:
@@ -226,11 +231,19 @@ class OverlayWindow:
         self._fg_color = fg
         self._win.configure(bg="black")
         self._win.wm_attributes("-alpha", alpha)
-        self._label.config(bg=bg, font=(ff, fs))
-        # Reapply rarity colour to current text (or reset to theme fg)
+        self._frame.config(bg=bg)
+        font = (ff, fs)
+        for lbl in (self._lbl_pre, self._lbl_rarity, self._lbl_post):
+            lbl.config(bg=bg, font=font)
         if self._current_text:
-            colour = _rarity_colour(self._current_text, self._fg_color)
-            self._label.config(fg=colour)
+            pre, rarity, post = _split_rarity(self._current_text)
+            self._lbl_pre.config(text=pre, fg=fg)
+            self._lbl_rarity.config(
+                text=rarity,
+                fg=RARITY_COLOURS[rarity] if rarity else fg,
+            )
+            self._lbl_post.config(text=post, fg=fg)
             self._win.deiconify()
         else:
-            self._label.config(fg=fg)
+            for lbl in (self._lbl_pre, self._lbl_rarity, self._lbl_post):
+                lbl.config(fg=fg)

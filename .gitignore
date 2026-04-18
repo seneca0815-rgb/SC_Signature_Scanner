@@ -39,6 +39,8 @@ redist/
 2_preprocessed.png
 debug_roi.png
 theme_preview.png
+debug_*.png
+debug_crops/
 
 # ---------------------------------------------------------------
 # Config contains machine-specific paths (tesseract_cmd etc.)
@@ -49,7 +51,7 @@ config.json
 # ---------------------------------------------------------------
 # Test fixture screenshots (PNGs are large; manifest.json is tracked)
 # ---------------------------------------------------------------
-test_fixtures/*.png
+test_fixtures/**/*.png
 
 # ---------------------------------------------------------------
 # Audio – WAV files are part of the release and are tracked by git.

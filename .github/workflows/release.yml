@@ -31,18 +31,13 @@ jobs:
         shell: pwsh
 
       - name: Generate theme_preview.png
-        run: python generate_theme_preview.py
+        run: python scripts/generate_theme_preview.py
 
       # ---------------------------------------------------------------
       # Gate: all tests must pass before building
       # ---------------------------------------------------------------
       - name: Run tests
-        run: |
-          python test_core.py
-          python test_setup_wizard.py
-          python test_integration.py
-          python test_ui_acceptance.py
-          python test_installer.py
+        run: python -m pytest tests/test_core.py tests/test_setup_wizard.py tests/test_integration.py tests/test_ui_acceptance.py tests/test_installer.py -v
 
       # ---------------------------------------------------------------
       # Install Tesseract OCR (needed by pytesseract at build time)
@@ -67,7 +62,7 @@ jobs:
       # Generate brand assets (icons, installer BMPs, theme preview)
       # ---------------------------------------------------------------
       - name: Generate brand assets
-        run: python generate_assets.py
+        run: python scripts/generate_assets.py
 
       # ---------------------------------------------------------------
       # Build exe with PyInstaller

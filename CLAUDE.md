@@ -16,30 +16,30 @@ python main.py
 python main.py --setup
 
 # Run all tests (mirrors CI)
-python -m pytest test_core.py test_setup_wizard.py test_integration.py test_ui_acceptance.py test_installer.py -v
+python -m pytest tests/ -v
 
 # Run a single test file
-python -m pytest test_core.py -v
+python -m pytest tests/test_core.py -v
 
 # Run a single test by name
-python -m pytest test_core.py -v -k "test_normalize"
+python -m pytest tests/test_core.py -v -k "test_normalize"
 
 # Copy example config before first run or testing
 cp config.example.json config.json
 
 # OCR debug — saves 1_original.png and 2_preprocessed.png
-python test_ocr.py
+python scripts/test_ocr.py
 
 # Calibrate scan region interactively
-python find_roi.py
+python scripts/find_roi.py
 
 # Build executable (requires PyInstaller)
 pyinstaller --onefile --noconsole --name SCSigReader main.py \
   --add-data "config.example.json;." --add-data "lookup.json;." \
-  --add-data "themes.py;." --add-data "display_window.py;." \
-  --add-data "overlay_window.py;." --add-data "control_panel.py;." \
-  --add-data "setup_wizard.py;." --add-data "tray_icon.py;." \
-  --add-data "app_state.py;." --add-data "overlay.py;."
+  --add-data "themes.py;." --add-data "overlay_window.py;." \
+  --add-data "control_panel.py;." --add-data "setup_wizard.py;." \
+  --add-data "tray_icon.py;." --add-data "app_state.py;." \
+  --add-data "overlay.py;."
 ```
 
 ## Architecture Overview
