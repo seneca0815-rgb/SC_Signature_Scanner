@@ -44,10 +44,26 @@ POSITION_PRESETS = [
 ]
 
 
+_PRESET_MAP: dict[str, tuple[str, str]] = {
+    "center":        ("center", "center"),
+    "top_left":      ("left",   "top"),
+    "top_center":    ("center", "top"),
+    "top_right":     ("right",  "top"),
+    "upper_left":    ("left",   "upper"),
+    "upper_center":  ("center", "upper"),
+    "upper_right":   ("right",  "upper"),
+    "center_left":   ("left",   "center"),
+    "center_right":  ("right",  "center"),
+    "bottom_left":   ("left",   "bottom"),
+    "bottom_center": ("center", "bottom"),
+    "bottom_right":  ("right",  "bottom"),
+}
+
+
 def _compute_position(preset: str, win: tk.Toplevel, root: tk.Tk,
                       custom_x: int, custom_y: int) -> tuple[int, int]:
     """Return (x, y) screen coordinates for the given preset."""
-    if preset == "custom":
+    if preset == "custom" or preset not in _PRESET_MAP:
         return custom_x, custom_y
 
     sw = root.winfo_screenwidth()
@@ -58,35 +74,7 @@ def _compute_position(preset: str, win: tk.Toplevel, root: tk.Tk,
     wh = win.winfo_reqheight()
 
     margin = 20
-
-    col, row = preset.split("_") if "_" in preset else (preset, "center")
-
-    if preset == "center":
-        col, row = "center", "center"
-    elif preset == "top_left":
-        col, row = "left", "top"
-    elif preset == "top_center":
-        col, row = "center", "top"
-    elif preset == "top_right":
-        col, row = "right", "top"
-    elif preset == "upper_left":
-        col, row = "left", "upper"
-    elif preset == "upper_center":
-        col, row = "center", "upper"
-    elif preset == "upper_right":
-        col, row = "right", "upper"
-    elif preset == "center_left":
-        col, row = "left", "center"
-    elif preset == "center_right":
-        col, row = "right", "center"
-    elif preset == "bottom_left":
-        col, row = "left", "bottom"
-    elif preset == "bottom_center":
-        col, row = "center", "bottom"
-    elif preset == "bottom_right":
-        col, row = "right", "bottom"
-    else:
-        return custom_x, custom_y
+    col, row = _PRESET_MAP[preset]
 
     if col == "left":
         x = margin
