@@ -1,12 +1,2 @@
-[run]
-include =
-    app_state.py
-    audio_manager.py
-    control_panel.py
-    logger_setup.py
-    main.py
-    overlay.py
-    overlay_window.py
-    setup_wizard.py
-    themes.py
-    tray_icon.py
+[report]
+show_missing = True

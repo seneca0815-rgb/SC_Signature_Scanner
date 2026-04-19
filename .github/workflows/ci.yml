@@ -26,7 +26,7 @@ jobs:
         shell: pwsh
 
       - name: Run tests
-        run: python -m pytest tests/test_core.py tests/test_setup_wizard.py tests/test_integration.py tests/test_ui_acceptance.py tests/test_installer.py -v --junitxml=test-results.xml --cov=. --cov-report=xml:coverage.xml
+        run: python -m pytest tests/test_core.py tests/test_setup_wizard.py tests/test_integration.py tests/test_ui_acceptance.py tests/test_installer.py -v --junitxml=test-results.xml --cov=app_state --cov=audio_manager --cov=control_panel --cov=logger_setup --cov=main --cov=overlay --cov=overlay_window --cov=setup_wizard --cov=themes --cov=tray_icon --cov-report=xml:coverage.xml
 
       - name: Cyclomatic complexity
         shell: pwsh

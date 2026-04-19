@@ -252,8 +252,11 @@ class TestOverlayWindow(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.root = tk.Tk()
-        cls.root.withdraw()
+        try:
+            cls.root = tk.Tk()
+            cls.root.withdraw()
+        except tk.TclError as exc:
+            raise unittest.SkipTest(f"Tk not available: {exc}")
 
     @classmethod
     def tearDownClass(cls):
@@ -417,8 +420,11 @@ class TestControlPanel(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.root = tk.Tk()
-        cls.root.withdraw()
+        try:
+            cls.root = tk.Tk()
+            cls.root.withdraw()
+        except tk.TclError as exc:
+            raise unittest.SkipTest(f"Tk not available: {exc}")
 
     @classmethod
     def tearDownClass(cls):
@@ -828,8 +834,11 @@ class TestControlPanelAudio(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.root = tk.Tk()
-        cls.root.withdraw()
+        try:
+            cls.root = tk.Tk()
+            cls.root.withdraw()
+        except tk.TclError as exc:
+            raise unittest.SkipTest(f"Tk not available: {exc}")
 
     @classmethod
     def tearDownClass(cls):
