@@ -176,23 +176,25 @@ class ControlPanel:
         theme_row = tk.Frame(w, bg=C_BG)
         theme_row.pack(fill="x", padx=16, pady=(0, 4))
 
-        self._theme_var = tk.StringVar(
-            value=self._state.active_theme
-                  if self._state.active_theme in self._themes
-                  else list(self._themes.keys())[0])
+        _default_theme = (
+            self._state.active_theme
+            if self._state.active_theme in self._themes
+            else list(self._themes.keys())[0]
+        )
+        self._theme_var = tk.StringVar(value=_default_theme)
 
         style = ttk.Style()
         style.theme_use("clam")
         style.configure("Vargo.TCombobox",
-                         fieldbackground=C_SURFACE,
-                         background=C_SURFACE,
-                         foreground=C_TEXT,
-                         selectbackground=C_BORDER,
-                         selectforeground=C_CYAN,
-                         arrowcolor=C_CYAN,
-                         bordercolor=C_BORDER,
-                         lightcolor=C_BORDER,
-                         darkcolor=C_BORDER)
+                        fieldbackground=C_SURFACE,
+                        background=C_SURFACE,
+                        foreground=C_TEXT,
+                        selectbackground=C_BORDER,
+                        selectforeground=C_CYAN,
+                        arrowcolor=C_CYAN,
+                        bordercolor=C_BORDER,
+                        lightcolor=C_BORDER,
+                        darkcolor=C_BORDER)
 
         combo = ttk.Combobox(
             theme_row,

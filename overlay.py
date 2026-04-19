@@ -29,18 +29,18 @@ log = get_logger()
 # Base directory – works both as plain Python and PyInstaller frozen exe
 # ---------------------------------------------------------------------------
 
+
 def get_base_dir() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys.executable).parent
     return Path(__file__).parent
+
 
 # ---------------------------------------------------------------------------
 # Konfiguration laden
 # ---------------------------------------------------------------------------
 CONFIG_PATH = get_base_dir() / "config.json"
 LOOKUP_PATH = get_base_dir() / "lookup.json"
-
-
 
 
 def load_json(path: Path) -> dict:
@@ -288,10 +288,14 @@ def ocr_pill(bgr: np.ndarray, pill: tuple[int, int, int, int]) -> str:
 # ---------------------------------------------------------------------------
 
 def levenshtein(a: str, b: str) -> int:
-    if a == b: return 0
-    if not a:  return len(b)
-    if not b:  return len(a)
-    if len(a) < len(b): a, b = b, a
+    if a == b:
+        return 0
+    if not a:
+        return len(b)
+    if not b:
+        return len(a)
+    if len(a) < len(b):
+        a, b = b, a
     prev = list(range(len(b) + 1))
     for i, ca in enumerate(a, 1):
         curr = [i]
@@ -307,14 +311,19 @@ def levenshtein(a: str, b: str) -> int:
 
 _OCR_DIGIT_MAP = str.maketrans("lI|OoSBZG", "111005826")
 
+
 def _normalize_digits(text: str) -> str:
-    def _r(m): return m.group().translate(_OCR_DIGIT_MAP)
+    def _r(m):
+        return m.group().translate(_OCR_DIGIT_MAP)
     return re.sub(r"[0-9lI|OoSBZG]{4,6}", _r, text)
+
 
 _ocr_normalize_digits = _normalize_digits
 
+
 def normalize(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
+
 
 def _extract_numbers(text: str) -> list[str]:
     # Strip thousands separators so "3,593" and "14.983" are found correctly
@@ -326,12 +335,15 @@ def lookup_text(raw: str) -> str | None:
     """Full lookup: exact → substring → fuzzy."""
     norm = raw.strip().lower()
     for key, val in lookup.items():
-        if key.lower() == norm: return val
+        if key.lower() == norm:
+            return val
     for key, val in lookup.items():
-        if key.lower() in norm: return val
+        if key.lower() in norm:
+            return val
 
     candidates = _extract_numbers(raw)
-    if not candidates: return None
+    if not candidates:
+        return None
 
     best_dist, best_val = FUZZY_MAX_DIST + 1, None
     for key, val in lookup.items():
@@ -355,9 +367,11 @@ def lookup_text_strict(raw: str) -> str | None:
     """
     norm = raw.strip().lower()
     for key, val in lookup.items():
-        if key.lower() == norm: return val
+        if key.lower() == norm:
+            return val
     for key, val in lookup.items():
-        if key.lower() in norm: return val
+        if key.lower() in norm:
+            return val
     return None
 
 
@@ -541,7 +555,8 @@ class OverlayWindow:
         self.root.mainloop()
 
     def _update(self, text: str):
-        if text == self._current_text: return
+        if text == self._current_text:
+            return
         self._current_text = text
         if text:
             self.label.config(text=text)

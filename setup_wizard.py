@@ -11,8 +11,6 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import font as tkfont
 
-from PIL import Image, ImageTk
-
 from logger_setup import get_logger
 
 log = get_logger()
@@ -21,10 +19,12 @@ log = get_logger()
 # Base directory – works both as plain Python and PyInstaller frozen exe
 # ---------------------------------------------------------------------------
 
+
 def get_base_dir() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys.executable).parent
     return Path(__file__).parent
+
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -38,6 +38,7 @@ THEMES_PATH  = BASE_DIR / "themes.py"
 # ---------------------------------------------------------------------------
 # Load themes dynamically from themes.py
 # ---------------------------------------------------------------------------
+
 
 def load_themes() -> dict:
     """Import THEMES from themes.py without a hard dependency."""
@@ -323,7 +324,7 @@ class SetupWizard:
 
         # Pill background
         canvas.create_rectangle(20, 20, 260, 60,
-                                 fill=bg, outline=C_BORDER, width=1)
+                                fill=bg, outline=C_BORDER, width=1)
 
         # Text
         try:
@@ -331,14 +332,14 @@ class SetupWizard:
         except Exception:
             fnt = tkfont.Font(size=fs, weight="bold")
         canvas.create_text(140, 40, text=ex, fill=fg,
-                            font=fnt, anchor="center")
+                           font=fnt, anchor="center")
 
         # Alpha note
         alpha_txt = f"alpha {theme.get('alpha', 1.0):.2f}"
         canvas.create_text(260, 72, text=alpha_txt,
-                            fill=C_MUTED,
-                            font=tkfont.Font(family="Consolas", size=9),
-                            anchor="e")
+                           fill=C_MUTED,
+                           font=tkfont.Font(family="Consolas", size=9),
+                           anchor="e")
 
     def _page_audio(self):
         f = self._frame
@@ -410,7 +411,7 @@ class SetupWizard:
         row4 = tk.Frame(f, bg=C_BG)
         row4.pack(fill="x", pady=(12, 0))
         self._test_msg_lbl = tk.Label(row4, text="", bg=C_BG, fg=C_MUTED,
-                                       font=("Consolas", 10))
+                                      font=("Consolas", 10))
         self._test_msg_lbl.pack(side="right", padx=(8, 0))
         tk.Button(
             row4, text="TEST AUDIO",
@@ -519,7 +520,6 @@ class SetupWizard:
             self.root.destroy()
             sys.exit(0)
 
-
     def _save_and_close(self):
         # Load existing config
         try:
@@ -563,7 +563,7 @@ class SetupWizard:
         if getattr(self, "_owns_root", True):
             self.root.destroy()
             sys.exit(0)
-        
+
     def run(self):
         log.info("Setup wizard started")
         self.root.mainloop()
