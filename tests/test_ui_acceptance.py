@@ -591,7 +591,10 @@ class TestSetupWizardUI(unittest.TestCase):
     """
 
     def setUp(self):
-        self.wizard = SetupWizard()
+        try:
+            self.wizard = SetupWizard()
+        except tk.TclError as exc:
+            self.skipTest(f"Tk not available: {exc}")
         self.wizard.root.update()
         self.wizard.root.update_idletasks()
 
