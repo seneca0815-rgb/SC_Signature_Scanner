@@ -6,3 +6,6 @@ pytesseract==0.3.13
 pystray==0.19.5
 keyboard==0.13.5
 pytest>=8.0
+pytest-cov>=5.0
+radon>=6.0
+flake8>=7.0

@@ -26,12 +26,30 @@ jobs:
         shell: pwsh
 
       - name: Run tests
-        run: python -m pytest tests/test_core.py tests/test_setup_wizard.py tests/test_integration.py tests/test_ui_acceptance.py tests/test_installer.py -v --junitxml=test-results.xml
+        run: python -m pytest tests/test_core.py tests/test_setup_wizard.py tests/test_integration.py tests/test_ui_acceptance.py tests/test_installer.py -v --junitxml=test-results.xml --cov=. --cov-report=xml:coverage.xml
+
+      - name: Cyclomatic complexity
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          python -m radon cc -j app_state.py audio_manager.py control_panel.py logger_setup.py main.py overlay.py overlay_window.py setup_wizard.py themes.py tray_icon.py | Out-File -FilePath radon-results.txt -Encoding utf8
+
+      - name: Linting
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $out = python -m flake8 app_state.py audio_manager.py control_panel.py logger_setup.py main.py overlay.py overlay_window.py setup_wizard.py themes.py tray_icon.py --count -q
+          if ($out) { $out | Out-File -FilePath flake8-results.txt -Encoding utf8 }
+          else { Set-Content -Path flake8-results.txt -Value "" }
 
       - name: Write job summary
         if: always()
         shell: pwsh
         run: |
+          $ts   = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd HH:mm UTC")
+          $out  = [System.Collections.Generic.List[string]]::new()
+
+          # ── Test Results ────────────────────────────────────────────
           $xml    = [xml](Get-Content test-results.xml)
           $suite  = $xml.testsuites.testsuite
           $total  = [int]$suite.tests
@@ -40,19 +58,103 @@ jobs:
           $skip   = [int]$suite.skipped
           $passed = $total - $fail - $errors - $skip
           $dur    = [math]::Round([double]$suite.time, 2)
-          $icon   = if ($fail -eq 0 -and $errors -eq 0) { "✅" } else { "❌" }
-          $ts     = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd HH:mm UTC")
+          $hdr    = if ($fail -eq 0 -and $errors -eq 0) { "✅" } else { "❌" }
 
-          @"
-          ## $icon Test Results — $ts
+          $out.Add("## $hdr CI Dashboard — $ts")
+          $out.Add("")
+          $out.Add("### Test Results")
+          $out.Add("")
+          $out.Add("| | Count |")
+          $out.Add("|---|---:|")
+          $out.Add("| ✅ Passed  | $passed |")
+          $out.Add("| ❌ Failed  | $fail   |")
+          $out.Add("| 🔴 Errors  | $errors |")
+          $out.Add("| ⏭ Skipped | $skip   |")
+          $out.Add("| **Total**  | **$total** |")
+          $out.Add("")
+          $out.Add("**Duration:** ${dur}s &nbsp;·&nbsp; **Python:** 3.11 &nbsp;·&nbsp; **Platform:** windows-latest")
+          $out.Add("")
+          $out.Add("---")
+          $out.Add("")
 
-          | | Count |
-          |---|---:|
-          | ✅ Passed  | $passed |
-          | ❌ Failed  | $fail   |
-          | 🔴 Errors  | $errors |
-          | ⏭ Skipped | $skip   |
-          | **Total**  | **$total** |
+          # ── Code Coverage ───────────────────────────────────────────
+          $out.Add("### 📊 Code Coverage")
+          $out.Add("")
+          if (Test-Path coverage.xml) {
+              $cov      = [xml](Get-Content coverage.xml)
+              $totPct   = [math]::Round([double]$cov.coverage.'line-rate' * 100)
+              $totIcon  = if ($totPct -ge 80) { "✅" } elseif ($totPct -ge 60) { "⚠️" } else { "❌" }
 
-          **Duration:** ${dur}s · **Python:** 3.11 · **Platform:** windows-latest
-          "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+              $rows = @()
+              foreach ($cls in $cov.coverage.packages.package.classes.class) {
+                  $pct  = [math]::Round([double]$cls.'line-rate' * 100)
+                  $icon = if ($pct -ge 80) { "✅" } elseif ($pct -ge 60) { "⚠️" } else { "❌" }
+                  $rows += [PSCustomObject]@{ File = $cls.name; Pct = $pct; Icon = $icon }
+              }
+
+              $out.Add("| File | Coverage |")
+              $out.Add("|---|---:|")
+              foreach ($r in ($rows | Sort-Object Pct)) {
+                  $out.Add("| ``$($r.File)`` | $($r.Icon) $($r.Pct)% |")
+              }
+              $out.Add("| **Total** | $totIcon **$totPct%** |")
+          } else {
+              $out.Add("_coverage.xml not found_")
+          }
+          $out.Add("")
+          $out.Add("---")
+          $out.Add("")
+
+          # ── Cyclomatic Complexity ───────────────────────────────────
+          $out.Add("### 🔀 Cyclomatic Complexity")
+          $out.Add("")
+          if (Test-Path radon-results.txt) {
+              $raw = Get-Content radon-results.txt -Raw
+              if ($raw.Trim()) {
+                  $radon = $raw | ConvertFrom-Json
+                  $rows  = @()
+                  foreach ($prop in $radon.PSObject.Properties) {
+                      $blocks = @($prop.Value)
+                      if ($blocks.Count -gt 0) {
+                          $cc   = $blocks | ForEach-Object { [int]$_.complexity }
+                          $avg  = [math]::Round(($cc | Measure-Object -Average).Average, 1)
+                          $max  = ($cc | Measure-Object -Maximum).Maximum
+                          $grade = if ($max -le 5) { "A" } elseif ($max -le 10) { "B" } elseif ($max -le 15) { "C" } else { "D" }
+                          $icon  = if ($grade -eq "A") { "✅" } elseif ($grade -eq "B") { "⚠️" } else { "❌" }
+                          $rows += [PSCustomObject]@{ File = $prop.Name; Avg = $avg; Max = $max; Grade = $grade; Icon = $icon }
+                      }
+                  }
+                  $out.Add("| File | Avg CC | Max CC | Grade |")
+                  $out.Add("|---|---:|---:|:---:|")
+                  foreach ($r in ($rows | Sort-Object Max -Descending)) {
+                      $out.Add("| ``$($r.File)`` | $($r.Avg) | $($r.Max) | $($r.Icon) $($r.Grade) |")
+                  }
+              } else {
+                  $out.Add("_no radon output_")
+              }
+          } else {
+              $out.Add("_radon-results.txt not found_")
+          }
+          $out.Add("")
+          $out.Add("---")
+          $out.Add("")
+
+          # ── Linting ─────────────────────────────────────────────────
+          $out.Add("### 🧹 Linting (flake8, max-line-length=120)")
+          $out.Add("")
+          $lintCount = 0
+          if (Test-Path flake8-results.txt) {
+              $content = Get-Content flake8-results.txt
+              if ($content) {
+                  $last = ($content | Select-Object -Last 1).Trim()
+                  if ($last -match '^\d+$') { $lintCount = [int]$last }
+              }
+          }
+          $lintIcon   = if ($lintCount -eq 0) { "✅" } else { "⚠️" }
+          $lintStatus = if ($lintCount -eq 0) { "Clean" } else { "$lintCount issues (informational)" }
+          $out.Add("| | |")
+          $out.Add("|---|---|")
+          $out.Add("| Issues | $lintCount |")
+          $out.Add("| Status | $lintIcon $lintStatus |")
+
+          $out -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
