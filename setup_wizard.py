@@ -92,13 +92,18 @@ C_BTN_HOV  = "#3a4155"
 class SetupWizard:
     STEPS = ["welcome", "resolution", "theme", "audio", "hotkey", "finish"]
 
-    def __init__(self, audio_manager=None):
-        self.root = tk.Tk()
+    def __init__(self, audio_manager=None, root=None):
+        if root is None:
+            self.root = tk.Tk()
+            self.root.eval("tk::PlaceWindow . center")
+            self._owns_root = True
+        else:
+            self.root = root
+            self._owns_root = False
         self.root.title("SC Signature Reader – Setup")
         self.root.geometry("620x600")
         self.root.resizable(False, False)
         self.root.configure(bg=C_BG)
-        self.root.eval("tk::PlaceWindow . center")
 
         self._audio_manager = audio_manager
 
@@ -510,8 +515,9 @@ class SetupWizard:
     # ------------------------------------------------------------------
     def _on_close(self):
         """Roter X-Button – Config nicht speichern, Prozess beenden."""
-        self.root.destroy()
-        sys.exit(0)
+        if getattr(self, "_owns_root", True):
+            self.root.destroy()
+            sys.exit(0)
 
 
     def _save_and_close(self):
@@ -554,8 +560,9 @@ class SetupWizard:
 
         log.info("Config written by wizard: %s", CONFIG_PATH)
 
-        self.root.destroy()
-        sys.exit(0)      # <- Prozess explizit beenden
+        if getattr(self, "_owns_root", True):
+            self.root.destroy()
+            sys.exit(0)
         
     def run(self):
         log.info("Setup wizard started")

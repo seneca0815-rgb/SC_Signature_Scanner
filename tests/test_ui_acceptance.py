@@ -15,8 +15,8 @@ Implementation notes:
   - _pump() flushes all pending tkinter after() callbacks before asserting.
   - winfo_ismapped() is used for visibility (works with overrideredirect).
   - setUpClass/tearDownClass share one Tk root per test class to avoid
-    multiple-Tk-instance issues; SetupWizard tests each create/destroy
-    their own root (the wizard owns it internally).
+    multiple-Tk-instance issues; SetupWizard accepts an optional root=
+    parameter so TestSetupWizardUI can follow the same pattern.
 
 Run with:
     python test_ui_acceptance.py
@@ -587,22 +587,35 @@ class TestControlPanel(unittest.TestCase):
 class TestSetupWizardUI(unittest.TestCase):
     """
     Real SetupWizard instances driven via button invocations.
-    Each test creates and destroys its own wizard (and its own tk.Tk root).
+    A single tk.Tk root is shared across all tests (setUpClass/tearDownClass)
+    to avoid repeated create/destroy cycles that degrade the Tcl environment
+    on the CI runner. Each test gets a fresh wizard built on that shared root.
     """
 
-    def setUp(self):
+    @classmethod
+    def setUpClass(cls):
         try:
-            self.wizard = SetupWizard()
+            cls._root = tk.Tk()
+            cls._root.withdraw()
         except tk.TclError as exc:
-            self.skipTest(f"Tk not available: {exc}")
+            raise unittest.SkipTest(f"Tk not available: {exc}")
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls._root.destroy()
+        except Exception:
+            pass
+
+    def setUp(self):
+        for w in self._root.winfo_children():
+            w.destroy()
+        self.wizard = SetupWizard(root=self._root)
         self.wizard.root.update()
         self.wizard.root.update_idletasks()
 
     def tearDown(self):
-        try:
-            self.wizard.root.destroy()
-        except Exception:
-            pass
+        pass
 
     def _pump(self):
         self.wizard.root.update()
