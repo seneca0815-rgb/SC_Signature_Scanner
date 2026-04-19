@@ -1,5 +1,10 @@
 # SC Signature Reader
 
+[![CI](https://github.com/seneca0815-rgb/SC_Signature_Scanner/actions/workflows/ci.yml/badge.svg)](https://github.com/seneca0815-rgb/SC_Signature_Scanner/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.11-blue?logo=python&logoColor=white)
+![Platform](https://img.shields.io/badge/platform-Windows-blue?logo=windows&logoColor=white)
+![ToS](https://img.shields.io/badge/ToS-compliant-brightgreen)
+
 A transparent always-on-top overlay for Star Citizen.  
 Automatically detects mining signature numbers in the HUD and displays  
 the corresponding mineral name with multiplier.

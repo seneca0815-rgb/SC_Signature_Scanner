@@ -26,4 +26,33 @@ jobs:
         shell: pwsh
 
       - name: Run tests
-        run: python -m pytest tests/test_core.py tests/test_setup_wizard.py tests/test_integration.py tests/test_ui_acceptance.py tests/test_installer.py -v
+        run: python -m pytest tests/test_core.py tests/test_setup_wizard.py tests/test_integration.py tests/test_ui_acceptance.py tests/test_installer.py -v --junitxml=test-results.xml
+
+      - name: Write job summary
+        if: always()
+        shell: pwsh
+        run: |
+          $xml    = [xml](Get-Content test-results.xml)
+          $suite  = $xml.testsuites.testsuite
+          $total  = [int]$suite.tests
+          $fail   = [int]$suite.failures
+          $errors = [int]$suite.errors
+          $skip   = [int]$suite.skipped
+          $passed = $total - $fail - $errors - $skip
+          $dur    = [math]::Round([double]$suite.time, 2)
+          $icon   = if ($fail -eq 0 -and $errors -eq 0) { "✅" } else { "❌" }
+          $ts     = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd HH:mm UTC")
+
+          @"
+          ## $icon Test Results — $ts
+
+          | | Count |
+          |---|---:|
+          | ✅ Passed  | $passed |
+          | ❌ Failed  | $fail   |
+          | 🔴 Errors  | $errors |
+          | ⏭ Skipped | $skip   |
+          | **Total**  | **$total** |
+
+          **Duration:** ${dur}s · **Python:** 3.11 · **Platform:** windows-latest
+          "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
