@@ -410,6 +410,79 @@ class TestOverlayWindow(unittest.TestCase):
         _pump(self.root)
         self.assertEqual(self.overlay._lbl_pre.cget("fg").lower(), "#00ff00")
 
+    def test_apply_theme_with_current_text_rerenders(self):
+        """_do_apply_theme must rerender when text is already displayed."""
+        self.overlay.show("ℹ  Quantainium (1x)  ·  Legendary")
+        _pump(self.root)
+        self.overlay.apply_theme({
+            "bg_color": "#222222", "fg_color": "#aabbcc",
+            "font_size": 14, "font_family": "Consolas"})
+        _pump(self.root)
+        # Overlay remains visible and rarity label keeps its colour
+        self.assertTrue(_is_mapped(self.overlay._win))
+        combined = (self.overlay._lbl_pre.cget("text")
+                    + self.overlay._lbl_rarity.cget("text")
+                    + self.overlay._lbl_post.cget("text"))
+        self.assertIn("Legendary", combined)
+
+    def test_set_position_custom(self):
+        """set_position with custom preset stores coordinates."""
+        self.overlay.set_position("custom", custom_x=100, custom_y=200)
+        _pump(self.root)
+        self.assertEqual(self.overlay._custom_x, 100)
+        self.assertEqual(self.overlay._custom_y, 200)
+
+    def test_set_position_preset(self):
+        """set_position with a named preset must store the preset name."""
+        self.overlay.set_position("top_left")
+        _pump(self.root)
+        self.assertEqual(self.overlay._position, "top_left")
+
+    def test_compute_position_preset_returns_ints(self):
+        """_compute_position with a valid preset must return two integers."""
+        from overlay_window import _compute_position
+        x, y = _compute_position("top_left", self.overlay._win,
+                                 self.root, 0, 0)
+        self.assertIsInstance(x, int)
+        self.assertIsInstance(y, int)
+
+    def test_compute_position_center(self):
+        from overlay_window import _compute_position
+        x, y = _compute_position("center", self.overlay._win,
+                                 self.root, 0, 0)
+        sw = self.root.winfo_screenwidth()
+        sh = self.root.winfo_screenheight()
+        self.assertGreater(x, 0)
+        self.assertGreater(y, 0)
+        self.assertLess(x, sw)
+        self.assertLess(y, sh)
+
+    def test_compute_position_top_right(self):
+        from overlay_window import _compute_position
+        x, y = _compute_position("top_right", self.overlay._win,
+                                 self.root, 0, 0)
+        self.assertGreater(x, 0)
+        self.assertGreaterEqual(y, 20)
+
+    def test_compute_position_upper_center(self):
+        from overlay_window import _compute_position
+        x, y = _compute_position("upper_center", self.overlay._win,
+                                 self.root, 0, 0)
+        self.assertGreaterEqual(y, 20)
+
+    def test_compute_position_bottom_left(self):
+        from overlay_window import _compute_position
+        x, y = _compute_position("bottom_left", self.overlay._win,
+                                 self.root, 0, 0)
+        sh = self.root.winfo_screenheight()
+        self.assertGreater(y, sh // 2)
+
+    def test_compute_position_unknown_uses_custom(self):
+        from overlay_window import _compute_position
+        x, y = _compute_position("unknown_preset", self.overlay._win,
+                                 self.root, 77, 88)
+        self.assertEqual((x, y), (77, 88))
+
 
 # ===========================================================================
 # 3. ControlPanel

@@ -219,6 +219,28 @@ class TestLogFileContent(unittest.TestCase):
         self.assertIn("scsigread", text)
 
 
+class TestSetupLoggerNonWindows(unittest.TestCase):
+    """Cover the non-Windows fallback log-directory path (logger_setup.py:44)."""
+
+    def setUp(self):
+        self._tmpdir = tempfile.mkdtemp()
+        _reset_logger()
+
+    def tearDown(self):
+        _reset_logger()
+        shutil.rmtree(self._tmpdir, ignore_errors=True)
+
+    def test_non_windows_uses_local_logs_dir(self):
+        ls = _reload()
+        # Patch __file__ so the "logs" subdir lands in a writable tmpdir
+        fake_module_file = str(Path(self._tmpdir) / "logger_setup.py")
+        with patch("platform.system", return_value="Linux"), \
+             patch.object(ls, "__file__", fake_module_file):
+            logger, log_path = ls.setup_logger({})
+        self.assertIn("logs", str(log_path))
+        self.assertTrue(log_path.parent.is_dir())
+
+
 class TestGetLogger(unittest.TestCase):
 
     def setUp(self):

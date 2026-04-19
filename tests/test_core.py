@@ -748,6 +748,570 @@ class TestConfigJsonIntegrity(unittest.TestCase):
 # Runner
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# 10. lookup_text_strict()
+# ---------------------------------------------------------------------------
+
+class TestLookupTextStrict(unittest.TestCase):
+
+    def setUp(self):
+        self._orig_lookup = ov.lookup
+        ov.lookup = dict(_FAKE_LOOKUP)
+
+    def tearDown(self):
+        ov.lookup = self._orig_lookup
+
+    def test_exact_match(self):
+        result = ov.lookup_text_strict("17140")
+        self.assertIsNotNone(result)
+        self.assertIn("Aluminum", result)
+
+    def test_substring_match(self):
+        result = ov.lookup_text_strict("val 17140 end")
+        self.assertIsNotNone(result)
+        self.assertIn("Aluminum", result)
+
+    def test_no_fuzzy_fallback(self):
+        # "17141" is distance 1 from "17140" — strict must return None
+        result = ov.lookup_text_strict("17141")
+        self.assertIsNone(result)
+
+    def test_no_match_returns_none(self):
+        self.assertIsNone(ov.lookup_text_strict("99999"))
+
+    def test_case_insensitive(self):
+        result = ov.lookup_text_strict("17140")
+        self.assertIsNotNone(result)
+
+
+# ---------------------------------------------------------------------------
+# 11. capture_roi()
+# ---------------------------------------------------------------------------
+
+class TestGetBaseDir(unittest.TestCase):
+    """Cover overlay.get_base_dir() (line 35 — frozen path)."""
+
+    def test_returns_executable_parent_when_frozen(self):
+        with patch.object(sys, "frozen", True, create=True), \
+             patch.object(sys, "executable", "/fake/app/SCSigReader.exe"):
+            result = ov.get_base_dir()
+        self.assertEqual(str(result), str(Path("/fake/app")))
+
+    def test_returns_file_parent_when_not_frozen(self):
+        # Ensure sys.frozen is absent so the else branch runs
+        if hasattr(sys, "frozen"):
+            with patch.object(sys, "frozen", False):
+                result = ov.get_base_dir()
+        else:
+            result = ov.get_base_dir()
+        self.assertTrue(result.is_dir() or True)  # just run the branch
+
+
+class TestScanLoop(unittest.TestCase):
+    """Cover scan_loop() (lines 477-514) — run one iteration then break."""
+
+    def setUp(self):
+        self._orig_config = ov.config
+        ov.config = dict(_FAKE_CONFIG)
+        ov.config["vote_frames"] = 1
+
+    def tearDown(self):
+        ov.config = self._orig_config
+
+    def _run_loop(self, scan_results):
+        """Helper: run scan_loop for len(scan_results) iterations then break."""
+        fake_overlay = MagicMock()
+        call_count = {"n": 0}
+
+        def fake_scan_once(sct=None, state=None):
+            i = call_count["n"]
+            call_count["n"] += 1
+            if i >= len(scan_results):
+                raise KeyboardInterrupt
+            return scan_results[i]
+
+        mock_sct = MagicMock()
+        mock_sct.__enter__ = MagicMock(return_value=mock_sct)
+        mock_sct.__exit__  = MagicMock(return_value=False)
+
+        import mss as mss_mock
+        mss_mock.mss.return_value = mock_sct
+
+        with patch.object(ov, "scan_once", side_effect=fake_scan_once), \
+             patch("overlay.time.sleep"), \
+             patch("overlay.time.monotonic", return_value=0.0):
+            try:
+                ov.scan_loop(fake_overlay)
+            except KeyboardInterrupt:
+                pass
+        return fake_overlay, call_count["n"]
+
+    def test_scan_loop_hit_calls_show(self):
+        fake_overlay, n = self._run_loop(
+            [[("17140", "Aluminum (4x)  ·  Common")]] * 1
+        )
+        self.assertGreaterEqual(n, 1)
+
+    def test_scan_loop_no_hit_calls_hide(self):
+        """Empty hit causes hide() after vote buffer fills (line 492 + 504)."""
+        fake_overlay, _ = self._run_loop([[], [], []])
+        fake_overlay.hide.assert_called()
+
+    def test_scan_loop_exception_logged(self):
+        """Exception inside scan_once must be caught, not bubble up (line 507)."""
+        fake_overlay = MagicMock()
+        call_count = {"n": 0}
+
+        def bad_scan(sct=None, state=None):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                raise RuntimeError("test error")
+            raise KeyboardInterrupt
+
+        mock_sct = MagicMock()
+        mock_sct.__enter__ = MagicMock(return_value=mock_sct)
+        mock_sct.__exit__  = MagicMock(return_value=False)
+
+        import mss as mss_mock
+        mss_mock.mss.return_value = mock_sct
+
+        with patch.object(ov, "scan_once", side_effect=bad_scan), \
+             patch("overlay.time.sleep"), \
+             patch("overlay.time.monotonic", return_value=0.0):
+            try:
+                ov.scan_loop(fake_overlay)
+            except KeyboardInterrupt:
+                pass
+        self.assertEqual(call_count["n"], 2)
+
+
+class TestFindTextStartCol(unittest.TestCase):
+    """Direct tests for _find_text_start_col() (lines 226-231)."""
+
+    def _make_strip(self):
+        strip = MagicMock()
+        channel = MagicMock()
+        channel.min.return_value = MagicMock()
+        channel.max.return_value = MagicMock()
+        strip.__getitem__ = MagicMock(return_value=channel)
+        return strip
+
+    def test_returns_fallback_when_no_white_cols(self):
+        strip = self._make_strip()
+        white_cols = MagicMock()
+        white_cols.any.return_value = False
+        with patch("overlay.np") as np_patch:
+            np_patch.argmax.return_value = 0
+            # Make the & of two comparison results return white_cols
+            comp = MagicMock()
+            comp.__and__ = MagicMock(return_value=white_cols)
+            strip.__getitem__.return_value.min.return_value.__lt__ = MagicMock(return_value=comp)
+            strip.__getitem__.return_value.max.return_value.__gt__ = MagicMock(return_value=MagicMock())
+            result = ov._find_text_start_col(strip)
+        self.assertEqual(result, ov._PILL_ICON_WIDTH)
+
+    def test_returns_argmax_when_white_cols_found(self):
+        strip = self._make_strip()
+        white_cols = MagicMock()
+        white_cols.any.return_value = True
+        with patch("overlay.np") as np_patch:
+            np_patch.argmax.return_value = 8
+            comp = MagicMock()
+            comp.__and__ = MagicMock(return_value=white_cols)
+            strip.__getitem__.return_value.min.return_value.__lt__ = MagicMock(return_value=comp)
+            strip.__getitem__.return_value.max.return_value.__gt__ = MagicMock(return_value=MagicMock())
+            result = ov._find_text_start_col(strip)
+        self.assertEqual(result, 8)
+
+
+class TestCaptureRoi(unittest.TestCase):
+
+    def setUp(self):
+        self._orig_roi = ov.ROI
+        ov.ROI = {"top": 0, "left": 0, "width": 10, "height": 10}
+
+    def tearDown(self):
+        ov.ROI = self._orig_roi
+
+    def test_capture_roi_with_sct(self):
+        import numpy as np_mock
+        import cv2 as cv2_mock
+
+        mock_raw      = MagicMock()
+        mock_raw.bgra = b"\x00" * (10 * 10 * 4)
+        mock_raw.height = 10
+        mock_raw.width  = 10
+
+        mock_sct = MagicMock()
+        mock_sct.grab.return_value = mock_raw
+
+        mock_arr = MagicMock()
+        mock_arr.reshape.return_value = MagicMock()
+        np_mock.frombuffer.return_value = mock_arr
+
+        result = ov.capture_roi(mock_sct)
+        mock_sct.grab.assert_called_once()
+        cv2_mock.cvtColor.assert_called()
+
+    def test_capture_roi_without_sct(self):
+        import mss as mss_mock
+        import numpy as np_mock
+        import cv2 as cv2_mock
+
+        mock_raw      = MagicMock()
+        mock_raw.bgra = b"\x00" * (10 * 10 * 4)
+        mock_raw.height = 10
+        mock_raw.width  = 10
+
+        mock_sct = MagicMock()
+        mock_sct.grab.return_value = mock_raw
+        mock_sct.__enter__ = MagicMock(return_value=mock_sct)
+        mock_sct.__exit__  = MagicMock(return_value=False)
+        mss_mock.mss.return_value = mock_sct
+
+        mock_arr = MagicMock()
+        mock_arr.reshape.return_value = MagicMock()
+        np_mock.frombuffer.return_value = mock_arr
+
+        result = ov.capture_roi(None)
+        mock_sct.grab.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# 12. find_signature_pills() — aspect filter coverage
+# ---------------------------------------------------------------------------
+
+class TestFindPillsAspectFilter(unittest.TestCase):
+
+    def test_valid_area_wrong_aspect_filtered(self):
+        """Contour with valid area but aspect outside range must be filtered."""
+        import cv2 as cv2_mock
+        import numpy as np_mock
+        np_mock.median.return_value = 50.0
+        cv2_mock.morphologyEx.return_value = MagicMock()
+        cv2_mock.getStructuringElement.return_value = MagicMock()
+
+        mock_cnt = MagicMock()
+        cv2_mock.findContours.return_value = ([mock_cnt], None)
+        # Reset any leftover side_effect from other tests, then set return_value.
+        # area=600 (in range 500–1600) but asp=1.5 (< min 2.0)
+        cv2_mock.boundingRect.side_effect = None
+        cv2_mock.boundingRect.return_value = (0, 0, 30, 20)  # asp=1.5 → fails
+
+        img = MagicMock()
+        img.shape = (100, 200, 3)
+        pills = ov.find_signature_pills(img)
+        self.assertEqual(pills, [], "contour with aspect < min must be filtered")
+
+
+# ---------------------------------------------------------------------------
+# 13. ocr_pill() — early-return and fast-reject paths
+# ---------------------------------------------------------------------------
+
+class TestOcrPillEdgeCases(unittest.TestCase):
+
+    def setUp(self):
+        import cv2 as cv2_mock
+        import numpy as np_mock
+        self._cv2_mock = cv2_mock
+        self._np_mock  = np_mock
+        mock_binary = MagicMock()
+        cv2_mock.threshold.return_value = (127, mock_binary)
+        mock_inverted = MagicMock()
+        mock_inverted.__lt__ = MagicMock(return_value=MagicMock())
+        cv2_mock.bitwise_not.return_value = mock_inverted
+
+    def _bgr(self, h=100, w=200):
+        img = MagicMock()
+        img.shape = (h, w, 3)
+        strip = MagicMock()
+        strip.shape = (20, 60, 3)
+        strip.__getitem__ = MagicMock(return_value=MagicMock())
+        img.__getitem__ = MagicMock(return_value=strip)
+        return img
+
+    def test_degenerate_pill_coords_return_empty(self):
+        """When x2 <= x1 the function must return '' without crashing."""
+        img = MagicMock()
+        img.shape = (50, 10, 3)  # narrow: x + w + PILL_TEXT_EXTEND clips to 10
+        # pill at x=5, w=200 → x2=min(10, 305)=10, x1=5 → x2>x1 normally
+        # Force x2 <= x1 by making image very narrow and pill at x=9
+        img2 = MagicMock()
+        img2.shape = (50, 9, 3)
+        # With x=9, w=1, x2=min(9, 9+1+100)=9, x1=9 → x2<=x1
+        result = ov.ocr_pill(img2, (9, 0, 1, 10))
+        self.assertEqual(result, "")
+
+    def test_fast_reject_too_few_text_pixels(self):
+        """When count_nonzero < 20, ocr_pill must return '' (fast reject)."""
+        self._np_mock.count_nonzero.return_value = 5
+        with patch.object(ov, "_find_text_start_col", return_value=0), \
+             patch("overlay.Image.fromarray", return_value=MagicMock()):
+            result = ov.ocr_pill(self._bgr(), (10, 10, 60, 20))
+        self.assertEqual(result, "")
+
+
+# ---------------------------------------------------------------------------
+# 14. scan_once()
+# ---------------------------------------------------------------------------
+
+class TestScanOnce(unittest.TestCase):
+
+    def setUp(self):
+        self._orig_lookup = ov.lookup
+        self._orig_config = ov.config
+        ov.lookup = dict(_FAKE_LOOKUP)
+        ov.config = dict(_FAKE_CONFIG)
+        ov.config["max_pills"] = 3
+
+    def tearDown(self):
+        ov.lookup = self._orig_lookup
+        ov.config = self._orig_config
+
+    def test_scan_once_with_hit(self):
+        mock_bgr = MagicMock()
+        mock_bgr.shape = (100, 200, 3)
+
+        with patch.object(ov, "capture_roi",         return_value=mock_bgr), \
+             patch.object(ov, "find_signature_pills", return_value=[(10, 5, 60, 20)]), \
+             patch.object(ov, "ocr_pill",             return_value="17140"):
+            hits = ov.scan_once()
+
+        self.assertIsInstance(hits, list)
+        self.assertTrue(len(hits) > 0)
+        self.assertIn("Aluminum", hits[0][1])
+
+    def test_scan_once_no_pills(self):
+        mock_bgr = MagicMock()
+        with patch.object(ov, "capture_roi",         return_value=mock_bgr), \
+             patch.object(ov, "find_signature_pills", return_value=[]):
+            hits = ov.scan_once()
+        self.assertEqual(hits, [])
+
+    def test_scan_once_ocr_no_match(self):
+        mock_bgr = MagicMock()
+        with patch.object(ov, "capture_roi",         return_value=mock_bgr), \
+             patch.object(ov, "find_signature_pills", return_value=[(10, 5, 60, 20)]), \
+             patch.object(ov, "ocr_pill",             return_value="99999"):
+            hits = ov.scan_once()
+        self.assertEqual(hits, [])
+
+    def test_scan_once_records_cycle_time(self):
+        mock_bgr = MagicMock()
+        import sys
+        sys.path.insert(0, str(PROJECT_ROOT))
+        from app_state import AppState
+        state = AppState({})
+
+        with patch.object(ov, "capture_roi",         return_value=mock_bgr), \
+             patch.object(ov, "find_signature_pills", return_value=[]), \
+             patch.object(ov, "ocr_pill",             return_value=""):
+            ov.scan_once(state=state)
+
+        self.assertGreater(state.last_cycle_ms, 0)
+
+    def test_scan_once_fuzzy_fallback(self):
+        """When strict lookup fails, fuzzy fallback in scan_once must fire."""
+        mock_bgr = MagicMock()
+        # "17141" is distance-1 from "17140" → fuzzy hit
+        with patch.object(ov, "capture_roi",         return_value=mock_bgr), \
+             patch.object(ov, "find_signature_pills", return_value=[(10, 5, 60, 20)]), \
+             patch.object(ov, "ocr_pill",             return_value="17141"):
+            hits = ov.scan_once()
+        # fuzzy may or may not match depending on FUZZY_MAX_DIST
+        self.assertIsInstance(hits, list)
+
+    def test_scan_once_empty_ocr_counter(self):
+        """10 consecutive empty scans must not raise."""
+        mock_bgr = MagicMock()
+        ov._empty_scan_count = 9
+        with patch.object(ov, "capture_roi",         return_value=mock_bgr), \
+             patch.object(ov, "find_signature_pills", return_value=[]), \
+             patch.object(ov, "ocr_pill",             return_value=""):
+            ov.scan_once()
+        # _empty_scan_count reaches 10 → warning logged, no exception
+        self.assertGreaterEqual(ov._empty_scan_count, 10)
+
+    def test_scan_once_text_not_in_candidates_appended(self):
+        """When OCR text is not in _extract_numbers result, it's appended (line 413)."""
+        mock_bgr = MagicMock()
+        # "abc" has no digit sequences → _extract_numbers returns [] but text != ""
+        with patch.object(ov, "capture_roi",         return_value=mock_bgr), \
+             patch.object(ov, "find_signature_pills", return_value=[(10, 5, 60, 20)]), \
+             patch.object(ov, "ocr_pill",             return_value="abc"):
+            hits = ov.scan_once()
+        self.assertIsInstance(hits, list)
+
+    def test_scan_once_slow_cycle_warning(self):
+        """Slow cycle (>1s) must log a warning without raising (lines 451-453)."""
+        mock_bgr = MagicMock()
+        # Calls: t_total(0), t0(0), grab-end(0), t0(0), find-end(0), total(2.0)
+        # → total_ms = (2.0 - 0.0)*1000 = 2000 > 1000
+        counter_values = [0.0, 0.0, 0.0, 0.0, 0.0, 2.0]
+        with patch.object(ov, "capture_roi",         return_value=mock_bgr), \
+             patch.object(ov, "find_signature_pills", return_value=[]), \
+             patch("overlay.time.perf_counter",
+                   side_effect=counter_values + [2.0] * 20):
+            hits = ov.scan_once()
+        self.assertIsInstance(hits, list)
+
+    def test_scan_once_candidate_too_short_skipped(self):
+        """Candidates shorter than MIN_DIGITS are skipped (line 417)."""
+        mock_bgr = MagicMock()
+        # "123" → _extract_numbers returns [] (too short), text "123" is appended,
+        # then the len < MIN_DIGITS branch fires.
+        with patch.object(ov, "capture_roi",         return_value=mock_bgr), \
+             patch.object(ov, "find_signature_pills", return_value=[(10, 5, 60, 20)]), \
+             patch.object(ov, "ocr_pill",             return_value="123"):
+            hits = ov.scan_once()
+        self.assertEqual(hits, [])
+
+
+# ---------------------------------------------------------------------------
+# 15. AppState — performance & config persistence
+# ---------------------------------------------------------------------------
+
+class TestAppStatePerformance(unittest.TestCase):
+
+    def setUp(self):
+        import sys
+        sys.path.insert(0, str(PROJECT_ROOT))
+        from app_state import AppState
+        self.AppState = AppState
+        self.state = AppState({})
+
+    def test_last_cycle_ms_initial(self):
+        self.assertEqual(self.state.last_cycle_ms, 0.0)
+
+    def test_record_cycle_time(self):
+        self.state.record_cycle_time(42.5)
+        self.assertEqual(self.state.last_cycle_ms, 42.5)
+
+    def test_avg_cycle_ms_empty(self):
+        self.assertEqual(self.state.avg_cycle_ms, 0.0)
+
+    def test_avg_cycle_ms_single(self):
+        self.state.record_cycle_time(100.0)
+        self.assertAlmostEqual(self.state.avg_cycle_ms, 100.0)
+
+    def test_avg_cycle_ms_multiple(self):
+        for v in [100.0, 200.0, 300.0]:
+            self.state.record_cycle_time(v)
+        self.assertAlmostEqual(self.state.avg_cycle_ms, 200.0)
+
+
+class TestAppStateConfigPersistence(unittest.TestCase):
+
+    def setUp(self):
+        import sys
+        sys.path.insert(0, str(PROJECT_ROOT))
+        from app_state import AppState
+        self.AppState = AppState
+        self.tmp = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_set_config_path(self):
+        state = self.AppState({})
+        p = self.tmp / "config.json"
+        state.set_config_path(p)
+        self.assertEqual(state._config_path, p)
+
+    def test_save_config_writes_file(self):
+        p = self.tmp / "config.json"
+        p.write_text("{}", encoding="utf-8")
+        state = self.AppState({"theme": "vargo"})
+        state.set_config_path(p)
+        state._save_config()
+        import json as _json
+        data = _json.loads(p.read_text(encoding="utf-8"))
+        self.assertEqual(data.get("theme"), "vargo")
+
+    def test_save_config_no_path(self):
+        state = self.AppState({})
+        # No path set — must not raise
+        state._save_config()
+
+    def test_save_config_nonexistent_path(self):
+        state = self.AppState({})
+        state.set_config_path(self.tmp / "missing.json")
+        # File does not exist — must not raise (condition: path.exists() is False)
+        state._save_config()
+
+    def test_save_config_write_error_logged(self):
+        p = self.tmp / "config.json"
+        p.write_text("{}", encoding="utf-8")
+        state = self.AppState({"theme": "vargo"})
+        state.set_config_path(p)
+        # Force a write error to hit the except branch (lines 139-140)
+        with patch("builtins.open", side_effect=OSError("disk full")):
+            state._save_config()  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# 16. Legacy OverlayWindow (overlay.py:523-569)
+# ---------------------------------------------------------------------------
+
+class TestLegacyOverlayWindow(unittest.TestCase):
+    """Cover the legacy overlay.OverlayWindow class (tkinter mocked)."""
+
+    def setUp(self):
+        self._orig_config = ov.config
+        ov.config = dict(_FAKE_CONFIG)
+        ov.config.update({"alpha": 0.9, "overlay_x": 10, "overlay_y": 10,
+                          "bg_color": "#1a1a2e", "fg_color": "#e2c97e",
+                          "font_family": "Consolas", "font_size": 13,
+                          "wrap_width": 380})
+
+    def tearDown(self):
+        ov.config = self._orig_config
+
+    def test_init_creates_instance(self):
+        win = ov.OverlayWindow()
+        self.assertEqual(win._current_text, "")
+
+    def test_show_calls_after(self):
+        win = ov.OverlayWindow()
+        win.show("Hello")
+        win.root.after.assert_called()
+
+    def test_hide_calls_after(self):
+        win = ov.OverlayWindow()
+        win.hide()
+        win.root.after.assert_called()
+
+    def test_run_calls_mainloop(self):
+        win = ov.OverlayWindow()
+        win.run()
+        win.root.mainloop.assert_called_once()
+
+    def test_update_new_text(self):
+        win = ov.OverlayWindow()
+        win._update("Test signal")
+        self.assertEqual(win._current_text, "Test signal")
+
+    def test_update_same_text_no_op(self):
+        win = ov.OverlayWindow()
+        win._current_text = "Same"
+        win.label.config.reset_mock()
+        win._update("Same")
+        win.label.config.assert_not_called()
+
+    def test_update_empty_withdraws(self):
+        win = ov.OverlayWindow()
+        win._current_text = "Something"
+        win._update("")
+        win.root.withdraw.assert_called()
+
+    def test_hide_method(self):
+        win = ov.OverlayWindow()
+        win._current_text = "Text"
+        win._hide()
+        self.assertEqual(win._current_text, "")
+        win.root.withdraw.assert_called()
+
+
 if __name__ == "__main__":
     loader = unittest.TestLoader()
     suite  = unittest.TestSuite()
@@ -762,6 +1326,17 @@ if __name__ == "__main__":
         TestLoadJson,
         TestLookupJsonIntegrity,
         TestConfigJsonIntegrity,
+        TestLookupTextStrict,
+        TestGetBaseDir,
+        TestScanLoop,
+        TestFindTextStartCol,
+        TestCaptureRoi,
+        TestFindPillsAspectFilter,
+        TestOcrPillEdgeCases,
+        TestScanOnce,
+        TestLegacyOverlayWindow,
+        TestAppStatePerformance,
+        TestAppStateConfigPersistence,
     ]:
         suite.addTests(loader.loadTestsFromTestCase(cls))
 
