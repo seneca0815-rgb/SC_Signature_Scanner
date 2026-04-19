@@ -658,6 +658,123 @@ class TestControlPanel(unittest.TestCase):
         finally:
             self.root.quit = original_quit
 
+    # --- theme change ---
+
+    def test_on_theme_change_updates_state(self):
+        self.panel._theme_var.set("dark-blue")
+        self.panel._on_theme_change()
+        _pump(self.root)
+        self.assertEqual(self.state.active_theme, "dark-blue")
+
+    def test_on_theme_change_calls_apply_theme(self):
+        mock_overlay = unittest.mock.MagicMock()
+        self.panel._overlay = mock_overlay
+        self.panel._theme_var.set("dark-gold")
+        self.panel._on_theme_change()
+        _pump(self.root)
+        mock_overlay.apply_theme.assert_called()
+
+    def test_on_theme_change_unknown_name_no_crash(self):
+        self.panel._theme_var.set("nonexistent-theme")
+        self.panel._on_theme_change()  # must not raise
+
+    # --- position change ---
+
+    def test_on_position_change_updates_config(self):
+        mock_overlay = unittest.mock.MagicMock()
+        self.panel._overlay = mock_overlay
+        self.panel._position_var.set("top_left")
+        self.panel._on_position_change()
+        self.assertEqual(self.config.get("overlay_position"), "top_left")
+
+    def test_on_position_change_calls_overlay_set_position(self):
+        mock_overlay = unittest.mock.MagicMock()
+        self.panel._overlay = mock_overlay
+        self.panel._position_var.set("center")
+        self.panel._on_position_change()
+        mock_overlay.set_position.assert_called_with("center")
+
+    # --- open log ---
+
+    def test_on_open_log_existing_dir(self):
+        import tempfile, shutil
+        tmpdir = Path(tempfile.mkdtemp())
+        try:
+            self.panel._log_dir = tmpdir
+            with unittest.mock.patch("subprocess.Popen") as mock_popen:
+                self.panel._on_open_log()
+            mock_popen.assert_called_once()
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_on_open_log_missing_dir_creates_and_opens(self):
+        import tempfile, shutil
+        tmpdir = Path(tempfile.mkdtemp()) / "new_subdir"
+        try:
+            self.panel._log_dir = tmpdir
+            with unittest.mock.patch("subprocess.Popen") as mock_popen:
+                self.panel._on_open_log()
+            self.assertTrue(tmpdir.is_dir())
+            mock_popen.assert_called_once()
+        finally:
+            shutil.rmtree(str(tmpdir.parent), ignore_errors=True)
+
+    def test_on_open_log_no_log_dir_no_crash(self):
+        self.panel._log_dir = None
+        self.panel._on_open_log()  # must not raise
+
+    # --- refresh_audio_toggle_btn early return ---
+
+    def test_refresh_audio_toggle_btn_no_attr_no_crash(self):
+        """_refresh_audio_toggle_btn must return silently when btn not built."""
+        panel_bare = ControlPanel.__new__(ControlPanel)
+        panel_bare._config = {}
+        panel_bare._refresh_audio_toggle_btn()  # line 393 early return
+
+    # --- performance / debug mode ---
+
+    def test_debug_mode_builds_perf_section(self):
+        """When log_level=DEBUG the perf section is rendered (lines 331-354)."""
+        debug_config = dict(self.config)
+        debug_config["log_level"] = "DEBUG"
+        debug_state  = AppState(debug_config)
+        try:
+            panel = ControlPanel(
+                self.root, debug_config, debug_state,
+                self.fake_overlay, PROJECT_ROOT)
+            _pump(self.root)
+            self.assertTrue(panel._show_perf)
+        finally:
+            try:
+                panel._win.destroy()
+            except Exception:
+                pass
+
+    def test_refresh_perf_updates_labels(self):
+        """_refresh_perf() must update perf labels without raising (lines 410-422)."""
+        debug_config = dict(self.config)
+        debug_config["log_level"] = "DEBUG"
+        debug_state  = AppState(debug_config)
+        try:
+            panel = ControlPanel(
+                self.root, debug_config, debug_state,
+                self.fake_overlay, PROJECT_ROOT)
+            _pump(self.root)
+            debug_state.record_cycle_time(250.0)
+            panel._refresh_perf()
+            _pump(self.root)
+            self.assertIn("250", panel._perf_last_lbl.cget("text"))
+        finally:
+            try:
+                panel._win.destroy()
+            except Exception:
+                pass
+
+    def test_refresh_perf_noop_when_disabled(self):
+        """When _show_perf is False, _refresh_perf must return immediately."""
+        self.panel._show_perf = False
+        self.panel._refresh_perf()  # must not raise (no perf labels exist)
+
 
 # ===========================================================================
 # 4. SetupWizard UI

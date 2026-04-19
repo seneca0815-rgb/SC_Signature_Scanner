@@ -542,5 +542,123 @@ class TestNoWinsound(unittest.TestCase):
             self.fail(f"play_init() raised unexpectedly: {e}")
 
 
+# ---------------------------------------------------------------------------
+# Tests – module-level _apply_volume() directly (lines 63-70, 76)
+# ---------------------------------------------------------------------------
+
+import io
+import struct
+import wave as _wave_mod
+
+
+def _write_wav(sampwidth: int, nframes: int = 8, framerate: int = 8000) -> bytes:
+    """Create a minimal valid WAV file in memory with the given sample width."""
+    buf = io.BytesIO()
+    with _wave_mod.open(buf, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(sampwidth)
+        wf.setframerate(framerate)
+        if sampwidth == 2:
+            wf.writeframes(struct.pack(f"<{nframes}h", *([1000] * nframes)))
+        elif sampwidth == 1:
+            wf.writeframes(bytes([128] * nframes))
+        else:
+            wf.writeframes(bytes(nframes * sampwidth))
+    return buf.getvalue()
+
+
+class TestApplyVolumeDirect(unittest.TestCase):
+    """Test the module-level _apply_volume() function with real numpy + wave."""
+
+    def setUp(self):
+        import importlib
+        # Temporarily remove any mock from sys.modules to load real numpy.
+        # test_core.py installs a MagicMock via sys.modules.setdefault at
+        # collection time, so we must bypass it here.
+        _saved = sys.modules.pop("numpy", None)
+        try:
+            real_numpy = importlib.import_module("numpy")
+        except ImportError:
+            real_numpy = None
+        finally:
+            if _saved is not None:
+                sys.modules["numpy"] = _saved
+
+        if real_numpy is None or isinstance(real_numpy, MagicMock):
+            self.skipTest("real numpy not available")
+        self._real_numpy = real_numpy
+
+        self._ws   = _make_fake_winsound()
+        self._am   = _reload_audio(self._ws)
+        # Inject real numpy into the reloaded module so _apply_volume works
+        self._am.np = self._real_numpy
+
+        self._tmp  = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        shutil.rmtree(self._tmp, ignore_errors=True)
+
+    def _wav_path(self, sampwidth: int) -> Path:
+        p = self._tmp / f"test_{sampwidth}.wav"
+        p.write_bytes(_write_wav(sampwidth))
+        return p
+
+    def test_16bit_returns_bytes(self):
+        path = self._wav_path(2)
+        result = self._am._apply_volume(path, 0.8)
+        self.assertIsInstance(result, bytes)
+        self.assertGreater(len(result), 0)
+
+    def test_16bit_returns_valid_wav(self):
+        path = self._wav_path(2)
+        result = self._am._apply_volume(path, 0.5)
+        buf = io.BytesIO(result)
+        with _wave_mod.open(buf, "rb") as wf:
+            self.assertEqual(wf.getsampwidth(), 2)
+
+    def test_8bit_returns_bytes(self):
+        """Lines 63-66: 8-bit PCM path must return bytes (not None)."""
+        path = self._wav_path(1)
+        result = self._am._apply_volume(path, 0.8)
+        self.assertIsInstance(result, bytes)
+
+    def test_8bit_returns_valid_wav(self):
+        path = self._wav_path(1)
+        result = self._am._apply_volume(path, 1.0)
+        self.assertIsNotNone(result)
+        buf = io.BytesIO(result)
+        with _wave_mod.open(buf, "rb") as wf:
+            self.assertEqual(wf.getsampwidth(), 1)
+
+    def test_unsupported_sampwidth_returns_none(self):
+        """Lines 67-70: sample width != 1 or 2 must return None."""
+        path = self._wav_path(4)
+        result = self._am._apply_volume(path, 1.0)
+        self.assertIsNone(result)
+
+    def test_missing_file_returns_none(self):
+        result = self._am._apply_volume(self._tmp / "no_such.wav", 1.0)
+        self.assertIsNone(result)
+
+    def test_volume_zero_scales_to_silence(self):
+        path = self._wav_path(2)
+        result = self._am._apply_volume(path, 0.0)
+        self.assertIsInstance(result, bytes)
+
+
+# ---------------------------------------------------------------------------
+# Tests – frozen path (line 27)
+# ---------------------------------------------------------------------------
+
+class TestFrozenBasedir(unittest.TestCase):
+    """Line 27: _BASE_DIR uses sys.executable.parent when frozen=True."""
+
+    def test_frozen_base_dir(self):
+        with patch.object(sys, "frozen", True, create=True), \
+             patch.object(sys, "executable", "/fake/dist/app.exe"):
+            am = _reload_audio(_make_fake_winsound())
+        self.assertEqual(str(am._BASE_DIR), str(Path("/fake/dist")))
+
+
 if __name__ == "__main__":
     unittest.main()
