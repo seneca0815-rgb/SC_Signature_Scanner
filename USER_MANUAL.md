@@ -1,15 +1,16 @@
 # SC Signature Reader — User Manual
 
-**Vargo Dynamics** · Version 1.1
+**Vargo Dynamics** · Version 1.3
 
 ---
 
 ## What does it do?
 
 When you scan a rock or salvageable object in Star Citizen, the HUD displays
-an orange signature number. SC Signature Reader reads that number automatically
-and shows you the corresponding mineral name, multiplier and rarity in a small
-overlay — without you having to memorise or look up anything manually.
+a signature number inside a small rounded pill next to a Location-Pin icon.
+SC Signature Reader reads that number automatically and shows you the
+corresponding mineral name, multiplier and rarity in a small overlay —
+without you having to memorise or look up anything manually.
 
 ```
 HUD shows:  9510
@@ -19,13 +20,17 @@ Overlay shows:  ℹ  Quantainium (3x)  ·  Legendary
 The tool uses screen capture only. It does **not** read game memory or inject
 anything — it is fully ToS-compliant.
 
+**Works on all ships** — Aegis, Anvil, Krueger, RSI, Argo and more.
+Detection is manufacturer-independent: it works regardless of HUD colour
+(cyan, orange, purple, green) or background (dark space, nebula, planet surface).
+
 ---
 
 ## Installation
 
 ### Option A — Installer (recommended)
 
-1. Download `SCSigReader_Setup_1.1.exe` from the [Releases page](../../releases).
+1. Download `SCSigReader_Setup_1.3.exe` from the [Releases page](../../releases).
 2. Run the installer — it will also install **Tesseract OCR** automatically.
 3. The **Setup Wizard** opens at the end of installation. Complete it once.
 
@@ -110,9 +115,22 @@ known signature number is detected.
 - It is always on top of other windows, including Star Citizen in borderless
   windowed mode.
 - It pauses (hides) when the scanner is paused.
+- The **text colour changes automatically** based on rarity:
 
-**Overlay position** — the default position is top-left (x 30, y 30). To move
-it, edit `overlay_x` and `overlay_y` in `config.json`.
+| Rarity | Colour |
+|---|---|
+| Common | White |
+| Uncommon | Blue |
+| Rare | Yellow |
+| Epic | Gold |
+| Legendary | Purple |
+
+**Overlay position** — select a named preset in the control panel, or set
+`overlay_position` to `custom` in `config.json` and adjust `overlay_x` / `overlay_y`.
+
+Available presets: `top_left`, `top_center`, `top_right`, `upper_left`,
+`upper_center`, `upper_right`, `center_left`, `center_right`,
+`bottom_left`, `bottom_center`, `bottom_right`.
 
 ---
 
@@ -172,7 +190,9 @@ You can change the hotkey in the Setup Wizard (`--setup`) or by editing
 
 ## Supported Resolutions
 
-The scan region is pre-configured for the three most common resolutions:
+The scan region covers the full game viewport above the cockpit dashboard.
+Rock labels float anywhere on screen depending on camera angle, so a
+full-width region is required.
 
 | Resolution | Notes |
 |---|---|
@@ -180,29 +200,30 @@ The scan region is pre-configured for the three most common resolutions:
 | 2560 × 1440 | WQHD (default in wizard) |
 | 3440 × 1440 | Ultrawide |
 
-For other resolutions or custom FOV settings, select **Custom** in the wizard
-and adjust `scan_region` manually in `config.json`:
+For other resolutions, select **Custom** in the wizard and adjust
+`scan_region` manually in `config.json`:
 
 ```json
 "scan_region": { "top": 130, "left": 200, "width": 2160, "height": 900 }
 ```
 
-Use `find_roi.py` (developer tool) to help identify the correct region for
-your setup.
+Use `find_roi.py` to help identify the correct region for your setup.
 
 ---
 
 ## Themes
 
-Five built-in themes are available:
+Six built-in themes are available. The overlay text colour changes
+automatically to match the detected mineral's rarity regardless of theme.
 
-| Theme | Background | Text | Style |
+| Theme | Background | Default text | Style |
 |---|---|---|---|
-| **vargo** | Dark navy | Cyan | Default Vargo Dynamics style |
-| **dark-gold** | Near-black | Gold | Classic dark overlay |
-| **dark-blue** | Deep navy | Light blue | Cool tone |
-| **light** | Off-white | Dark | High contrast |
-| **minimal** | Black | White | Smallest visual footprint |
+| **vargo** | `#1a1a2a` | Cyan | Default Vargo Dynamics style |
+| **dark-gold** | `#111827` | Gold | Warm, classic |
+| **dark-blue** | `#0d1b2a` | Blue | Cool, subtle |
+| **cockpit** | `#071a07` | Neon green | Retro terminal / HUD look |
+| **minimal** | `#0d0d1a` | White | Compact, unobtrusive |
+| **ghost** | Transparent | White | Floating text, no background box |
 
 Themes can be switched live in the control panel without restarting.
 
@@ -215,7 +236,7 @@ via WAV files from the `sounds\` folder.
 
 | Sound | Default | When it plays |
 |---|---|---|
-| **Startup** | On | App launches – *"Vargo Dynamics Scanner online."* |
+| **Startup** | On | App launches — *"Vargo Dynamics Scanner online."* |
 | **Activated** | On | Scanner resumed via hotkey or control panel |
 | **Deactivated** | On | Scanner paused via hotkey or control panel |
 | **Signal detected** | **Off** | Every time a signature is recognised |
@@ -227,22 +248,12 @@ becomes distracting quickly. Enable it in the control panel or
 
 **Volume** is controlled via the Windows volume mixer
 (right-click the speaker icon in the taskbar → *SC Signature Reader*).
-The volume slider in the control panel and wizard stores your preference
-but the actual output level follows the system mixer.
-
-**Audio settings in the control panel:**
-
-| Control | Description |
-|---|---|
-| **ON / OFF toggle** | Master switch for all audio |
-| **Volume slider** | Stores preference (see note above) |
-| **Signal sound toggle** | Enable/disable the per-detection sound |
 
 **Audio settings in config.json:**
 
 ```json
 "audio_enabled":          true,
-"audio_volume":           0.8,
+"audio_volume":           0.5,
 "audio_voice_init":       true,
 "audio_sound_activate":   true,
 "audio_sound_deactivate": true,
@@ -256,31 +267,42 @@ but the actual output level follows the system mixer.
 **The overlay never appears**
 - Make sure Star Citizen is in **borderless windowed** mode (not exclusive fullscreen).
 - Check that the scanner is **Active** (green dot in the control panel).
-- Confirm the scan region matches your resolution — run the Setup Wizard again (`--setup`).
+- Enable `"log_level": "DEBUG"` in `config.json` and check `pills=N` in the timing lines.
+- Run `python test_icon_detection.py` on a HUD screenshot to see which pills were detected.
 
 **Wrong mineral shown / flickering**
-- The HUD number may not be fully in the scan region. Try increasing `width` and `height` slightly in `config.json`.
 - Increase `vote_frames` (default `3`) to `5` for more stable results.
+- Tighten `scan_region` to exclude large bright UI panels.
 
-**OCR detects nothing at all**
-- Verify Tesseract is installed: open a terminal and run `tesseract --version`.
-- Check `tesseract_cmd` in `config.json` points to the correct path (usually `C:\Program Files\Tesseract-OCR\tesseract.exe`).
+**Pill not found (pills=0 every cycle)**
+- Check `median_V` in DEBUG log — if > 100, try lowering `pill_v_adaptive_offset`.
+- The scan region may be outside the game viewport — use `find_roi.py` to re-calibrate.
 
-**The overlay is in the wrong position**
-- Edit `overlay_x` and `overlay_y` in `config.json`. Values are screen pixels from the top-left corner.
+**Too many false pill candidates**
+- Reduce `pill_aspect_max` (e.g. `5.0`) to filter elongated false positives.
+- Tighten `scan_region` to exclude bright cockpit panel areas.
+
+**Slow scan cycles (> 1000 ms)**
+- Enable DEBUG logging — the PERFORMANCE panel in the control panel shows avg/last cycle time.
+- Reduce `max_pills` (e.g. `2`) to limit Tesseract calls per cycle.
 
 **The hotkey does not work**
 - Some keys require the application to be run as administrator. Right-click `SCSigReader.exe → Run as administrator`.
 - Try a different key in the Setup Wizard.
 
-**"~" prefix in the result**
-- A tilde (`~`) means a fuzzy match was used (OCR read the number with a small error). The result is still likely correct. If you see frequent fuzzy matches, tighten the scan region.
-
 **No audio / sounds not playing**
 - Verify that the `sounds\` folder exists next to `SCSigReader.exe` and contains the WAV files.
 - Check `audio_enabled: true` in `config.json`.
-- Check the Windows volume mixer — SC Signature Reader may be muted independently from system volume.
+- Check the Windows volume mixer — SC Signature Reader may be muted independently.
 - If WAV files are missing the app falls back to a simple beep tone.
+
+**"~" prefix in the result**
+- A tilde (`~`) means a fuzzy match was used. The result is still likely correct.
+- If you see frequent fuzzy matches, check the DEBUG log for raw OCR values.
+
+**Different resolution or FOV**
+- Adjust `scan_region` (see reference table above).
+- Pill detection is resolution- and HUD-colour-independent.
 
 **Reporting a problem**
 The fastest way to get help is to share your log file:
@@ -318,6 +340,19 @@ and audio settings in `config.json`. All other settings are preserved.
 
 ---
 
+---
+
+## Legal note
+
+We contacted CIG Player Support regarding this tool. Their response confirmed
+that tools providing unfair advantages, reading game memory, or automating
+gameplay are prohibited by the ToS. SC Signature Reader does none of these
+things — it uses screen capture only, provides no information unavailable to
+any player, and requires full manual control of all gameplay decisions.
+
+We are confident it complies with the Star Citizen Terms of Service.
+This assessment is ours, not CIG's. Use at your own risk.
+
 *SC Signature Reader is a fan-made community tool.
 Not affiliated with or endorsed by Cloud Imperium Games.
-See [DISCLAIMER.md](DISCLAIMER.md).*
+See [DISCLAIMER.md](DISCLAIMER.md) for the full disclaimer.*
