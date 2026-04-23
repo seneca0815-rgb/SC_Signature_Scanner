@@ -1,8 +1,8 @@
 """
-Star Citizen UI Overlay – Hauptprogramm (Icon-Anchor-Strategie)
-Erkennt das farbige Signatur-Icon (Raute) des jeweiligen Herstellers und
-liest die immer weiße Signaturzahl rechts davon per OCR.
-Unterstützte HUD-Farben: orange (Anvil), cyan (Aegis), grün (Krueger), lila (RSI).
+Star Citizen UI Overlay – main module (icon-anchor strategy)
+Detects the coloured signature icon of each manufacturer and reads the
+always-white signature number to its right via OCR.
+Supported HUD colours: orange (Anvil), cyan (Aegis), green (Krueger), purple (RSI).
 """
 
 import sys
@@ -37,7 +37,7 @@ def get_base_dir() -> Path:
 
 
 # ---------------------------------------------------------------------------
-# Konfiguration laden
+# Load configuration
 # ---------------------------------------------------------------------------
 CONFIG_PATH = get_base_dir() / "config.json"
 LOOKUP_PATH = get_base_dir() / "lookup.json"
@@ -60,22 +60,22 @@ MIN_DIGITS = 4
 MAX_DIGITS = 5
 
 # ---------------------------------------------------------------------------
-# Pill-Detektion: helle Cluster (Icon + weiße Zahl) im Signatur-Display
+# Pill detection: bright clusters (icon + white digit) in the signature display
 # ---------------------------------------------------------------------------
-_PILL_V_THRESHOLD        = 130  # V-Kanal-Schwellwert (Basis)
-_PILL_V_ADAPTIVE_OFFSET  = 60   # Offset auf Median-V bei hellem Hintergrund
-_PILL_CLOSE_W      = 14    # Closing-Kernel Breite (verbindet Icon und Zahl)
-_PILL_CLOSE_H      = 5     # Closing-Kernel Höhe
-_PILL_ASPECT_MIN   = 2.0   # Mindest-Aspekt (breiter als hoch)
-_PILL_ASPECT_MAX   = 6.0   # Maximal-Aspekt (alle Sig-Pillen: 3.2–3.7; ≥7 = False Positive)
-_PILL_AREA_MIN     = 200   # Mindestfläche der hellen Pixel im Cluster
-_PILL_AREA_MAX     = 6000  # Maximalgröße
-_PILL_ICON_WIDTH   = 16    # Geschätzte Icon-Breite (übersprungen beim OCR)
-_PILL_TEXT_EXTEND  = 100   # Pixel rechts über Cluster hinaus (volle Zahl)
+_PILL_V_THRESHOLD        = 130  # V-channel threshold (base)
+_PILL_V_ADAPTIVE_OFFSET  = 60   # Offset added to median-V on bright backgrounds
+_PILL_CLOSE_W      = 14    # Closing kernel width (bridges icon and digit gap)
+_PILL_CLOSE_H      = 5     # Closing kernel height
+_PILL_ASPECT_MIN   = 2.0   # Minimum aspect ratio (wider than tall)
+_PILL_ASPECT_MAX   = 6.0   # Maximum aspect ratio (all sig pills: 3.2–3.7; ≥7 = false positive)
+_PILL_AREA_MIN     = 200   # Minimum bounding-box area of bright pixel cluster
+_PILL_AREA_MAX     = 6000  # Maximum bounding-box area
+_PILL_ICON_WIDTH   = 16    # Estimated icon width (skipped during OCR)
+_PILL_TEXT_EXTEND  = 100   # Pixels to extend right past the cluster (capture full digit)
 
-# OCR-Parameter
-_TEXT_STRIP_HPAD   = 6     # vertikale Pufferzone um den Cluster
-_TARGET_OCR_HEIGHT = 60    # Zielhöhe für Tesseract
+# OCR parameters
+_TEXT_STRIP_HPAD   = 6     # Vertical padding around the cluster
+_TARGET_OCR_HEIGHT = 60    # Target height for Tesseract
 
 _empty_scan_count: int = 0   # consecutive empty-OCR counter
 
@@ -118,12 +118,12 @@ def init(config_path: Path, lookup_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Schritt 1: Screenshot erfassen
+# Step 1: Capture screenshot
 # ---------------------------------------------------------------------------
 
 
 def capture_roi(sct: mss.mss = None) -> np.ndarray:
-    """Screenshot als BGR-numpy-Array.
+    """Capture the configured ROI as a BGR numpy array.
 
     `sct` is an optional pre-created mss.mss() instance.  Passing one in
     avoids the per-call OS display-context setup overhead (~20-50 ms).
@@ -141,40 +141,39 @@ def capture_roi(sct: mss.mss = None) -> np.ndarray:
 
 
 # ---------------------------------------------------------------------------
-# Schritt 2: Signatur-Pille erkennen (Bright-Cluster-Strategie)
+# Step 2: Detect signature pill (bright-cluster strategy)
 # ---------------------------------------------------------------------------
 
-# Helle Cluster-Erkennungsparameter (konfigurierbar via config.json)
-_PILL_V_THRESHOLD        = 130  # V-Kanal-Schwellwert (Basis)
-_PILL_V_ADAPTIVE_OFFSET  = 60   # Offset auf Median-V bei hellem Hintergrund
-_PILL_CLOSE_W      = 14    # Closing-Kernel Breite (verbindet Icon und Zahl)
-_PILL_CLOSE_H      = 5     # Closing-Kernel Höhe
-_PILL_ASPECT_MIN   = 2.0   # Mindest-Aspekt (breiter als hoch)
-_PILL_ASPECT_MAX   = 6.0   # Maximal-Aspekt (alle Sig-Pillen: 3.2–3.7; ≥7 = False Positive)
-_PILL_AREA_MIN     = 500   # Signatur-Pille Bbox ~1000–1400 px² (w×h)
-_PILL_AREA_MAX     = 1600  # Cockpit-Panels Bbox > 1700 px² (w×h)
-_PILL_ICON_WIDTH   = 16    # Geschätzte Icon-Breite in Pixeln (übersprungen beim OCR)
-_PILL_TEXT_EXTEND  = 100   # Pixel rechts über den Cluster hinaus (volle Zahl sichern)
+# Bright-cluster detection parameters (configurable via config.json)
+_PILL_V_THRESHOLD        = 130  # V-channel threshold (base)
+_PILL_V_ADAPTIVE_OFFSET  = 60   # Offset added to median-V on bright backgrounds
+_PILL_CLOSE_W      = 14    # Closing kernel width (bridges icon and digit gap)
+_PILL_CLOSE_H      = 5     # Closing kernel height
+_PILL_ASPECT_MIN   = 2.0   # Minimum aspect ratio (wider than tall)
+_PILL_ASPECT_MAX   = 6.0   # Maximum aspect ratio (all sig pills: 3.2–3.7; ≥7 = false positive)
+_PILL_AREA_MIN     = 500   # Signature pill bbox ~1000–1400 px² (w×h)
+_PILL_AREA_MAX     = 1600  # Cockpit panel bbox > 1700 px² (w×h)
+_PILL_ICON_WIDTH   = 16    # Estimated icon width in pixels (skipped during OCR)
+_PILL_TEXT_EXTEND  = 100   # Pixels to extend right past the cluster (capture full digit)
 
 
 def find_signature_pills(bgr: np.ndarray) -> list[tuple[int, int, int, int]]:
-    """Findet helle Signatur-Display-Pillen im Bild.
+    """Find bright signature-display pills in the image.
 
-    Das Signatur-Element besteht aus einem dunklen abgerundeten Rechteck
-    (Pille) mit einem Location-Pin-Icon und der weißen Signaturzahl darin.
-    Der kombinierte helle Inhalt (Icon + Zahl) bildet einen distinktiven
-    Cluster mit Aspekt 2–8 und kleiner Fläche.
+    The signature element is a dark rounded rectangle (pill) containing a
+    location-pin icon and the white signature number.  The combined bright
+    content (icon + digit) forms a distinctive cluster with aspect ratio 2–8
+    and small area.
 
-    Gibt eine Liste von (x, y, w, h) Bounding-Boxes der hellen Cluster zurück,
-    sortiert nach Fläche (größte zuerst, da die Signatur-Pille meist der
-    prominenteste Cluster ist).
+    Returns a list of (x, y, w, h) bounding boxes of bright clusters,
+    sorted by closeness to the expected pill area.
     """
     hsv    = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
     val    = hsv[:, :, 2]
     h_img, w_img = bgr.shape[:2]
 
-    # Adaptiver Schwellwert: bei hellem Hintergrund (z.B. Argo/blauer Nebel)
-    # liegt der Median-V nahe am Basiswert → Schwellwert automatisch erhöhen.
+    # Adaptive threshold: on bright backgrounds (e.g. Argo / blue nebula) the
+    # median-V approaches the base threshold — raise it automatically.
     median_v = float(np.median(val))
     v_thresh = max(_PILL_V_THRESHOLD, int(median_v) + _PILL_V_ADAPTIVE_OFFSET)
     log.debug("find_signature_pills: median_V=%.0f v_thresh=%d", median_v, v_thresh)
@@ -190,9 +189,9 @@ def find_signature_pills(bgr: np.ndarray) -> list[tuple[int, int, int, int]]:
     for cnt in cnts:
         x, y, w, h = cv2.boundingRect(cnt)
         bbox_area = w * h
-        # Filterung nach Bounding-Box-Fläche (nicht Konturfläche):
-        # Cockpit-Panels haben niedrige fill-Ratio → Konturfläche < Bbox,
-        # aber Bbox ist der zuverlässigere Größen-Indikator.
+        # Filter by bounding-box area (not contour area): cockpit panels have
+        # a low fill ratio so contour area < bbox, but bbox is the more
+        # reliable size indicator.
         if not (_PILL_AREA_MIN <= bbox_area <= _PILL_AREA_MAX):
             continue
         asp = w / max(h, 1)
@@ -200,28 +199,28 @@ def find_signature_pills(bgr: np.ndarray) -> list[tuple[int, int, int, int]]:
             continue
         pills.append((x, y, w, h))
 
-    # Nach Nähe zur erwarteten Signatur-Pille-Größe sortieren.
-    # Alle vier getesteten Hersteller haben Pillen ~1000–1400 px² (Bbox).
-    # Dieser Target-Wert kann via config.json "pill_area_target" angepasst werden.
+    # Sort by closeness to the expected signature pill size.
+    # All four tested manufacturers produce pills ~1000–1400 px² (bbox).
+    # This target is overridable via config.json "pill_area_target".
     target = config.get("pill_area_target", 1200)
     pills.sort(key=lambda p: abs(p[2] * p[3] - target))
     return pills
 
 
 # ---------------------------------------------------------------------------
-# Schritt 3: Text innerhalb der Pille OCR-en
+# Step 3: OCR the text inside the pill
 # ---------------------------------------------------------------------------
 
 
 def _find_text_start_col(hsv_strip: np.ndarray) -> int:
-    """Findet die erste Spalte mit echtem weißem Text.
+    """Find the first column containing actual white text.
 
-    Kriterium: S_min < 35 UND V_max > 200.
-    - Icon-Pixel haben S_min ~40-70 (farbige Fringes) und V_max variabel.
-    - Weiße Text-Pixel haben S_min < 30 und V_max nahe 255.
+    Criterion: S_min < 35 AND V_max > 200.
+    - Icon pixels have S_min ~40-70 (coloured fringes) and variable V_max.
+    - White text pixels have S_min < 30 and V_max close to 255.
 
-    Gibt den Spalten-Offset zurück ab dem der Text beginnt.
-    Fallback: _PILL_ICON_WIDTH.
+    Returns the column offset where the text starts.
+    Falls back to _PILL_ICON_WIDTH if no white column is found.
     """
     col_sat_min = hsv_strip[:, :, 1].min(axis=0)
     col_val_max = hsv_strip[:, :, 2].max(axis=0)
@@ -232,12 +231,12 @@ def _find_text_start_col(hsv_strip: np.ndarray) -> int:
 
 
 def ocr_pill(bgr: np.ndarray, pill: tuple[int, int, int, int]) -> str:
-    """Liest die weiße Signaturzahl aus einer erkannten Pille.
+    """Read the white signature number from a detected pill.
 
-    Das Icon am linken Rand wird durch Sättigungs-Analyse übersprungen,
-    sodass nur der Zifferntext an Tesseract übergeben wird.
+    The icon on the left edge is skipped via saturation analysis so that
+    only the digit text is passed to Tesseract.
 
-    Gibt einen bereinigten Ziffernstring zurück oder '' bei Fehlschlag.
+    Returns a cleaned digit string, or '' on failure.
     """
     x, y, w, h = pill
     h_img, w_img = bgr.shape[:2]
@@ -253,11 +252,11 @@ def ocr_pill(bgr: np.ndarray, pill: tuple[int, int, int, int]) -> str:
     hsv_strip = cv2.cvtColor(bgr[y1:y2, x1:x2], cv2.COLOR_BGR2HSV)
     text_col  = _find_text_start_col(hsv_strip)
 
-    # Text-Region: Icon überspringen, rechts ausreichend Platz lassen
+    # Text region: skip the icon, leave enough room on the right
     xt1 = min(x1 + text_col, x2 - 10)
     strip = bgr[y1:y2, xt1:x2]
 
-    # Auf Ziel-Höhe skalieren
+    # Scale to target height
     sh, sw = strip.shape[:2]
     scale = max(1.0, _TARGET_OCR_HEIGHT / max(sh, 1))
     if scale > 1.0:
@@ -265,14 +264,14 @@ def ocr_pill(bgr: np.ndarray, pill: tuple[int, int, int, int]) -> str:
                            (round(sw * scale), round(sh * scale)),
                            interpolation=cv2.INTER_LANCZOS4)
 
-    # Blue-Kanal + Otsu-Schwellwert: funktioniert für alle Hintergründe.
-    # Weiße/helle Pixel haben hohe B-Werte unabhängig von der HUD-Farbe.
-    # Otsu trennt lokal Text von Hintergrund — auch bei hellem Argo-Nebel.
+    # Blue channel + Otsu threshold: works across all backgrounds.
+    # White/bright pixels have high B values regardless of HUD colour.
+    # Otsu separates text from background locally — even on bright Argo nebula.
     blue     = strip[:, :, 0]
     _, binary = cv2.threshold(blue, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     inverted  = cv2.bitwise_not(binary)
 
-    # Fast-reject: zu wenig Text-Pixel
+    # Fast-reject: too few text pixels
     if np.count_nonzero(inverted < 50) < 20:
         return ""
 
@@ -284,7 +283,7 @@ def ocr_pill(bgr: np.ndarray, pill: tuple[int, int, int, int]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Schritt 3: Fuzzy Lookup (unverändert)
+# Step 3: Fuzzy lookup
 # ---------------------------------------------------------------------------
 
 def levenshtein(a: str, b: str) -> int:
@@ -376,14 +375,14 @@ def lookup_text_strict(raw: str) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# Schritt 4: Scan-Loop mit Voting
+# Step 4: Scan loop with voting
 # ---------------------------------------------------------------------------
 
 def scan_once(sct=None, state=None) -> list[tuple[str, str]]:
-    """Ein Scan-Durchlauf (Icon-Anchor-Strategie).
+    """Run one scan cycle (icon-anchor strategy).
 
-    Gibt Liste von (erkannte_zahl, lookup_ergebnis) zurück.
-    Wenn state übergeben wird, werden Cycle-Zeiten in AppState aufgezeichnet.
+    Returns a list of (detected_number, lookup_result) pairs.
+    If state is provided, cycle times are recorded in AppState.
     """
     t_total = time.perf_counter()
 
@@ -473,7 +472,7 @@ def scan_once(sct=None, state=None) -> list[tuple[str, str]]:
 
 
 def scan_loop(overlay: "OverlayWindow"):
-    """Voting über mehrere Frames für stabile Erkennung."""
+    """Run the voting loop over multiple frames for stable detection."""
     VOTE_FRAMES = config.get("vote_frames", 3)
     buffer: list[str] = []
     last_shown = None
@@ -486,12 +485,12 @@ def scan_loop(overlay: "OverlayWindow"):
             try:
                 hits = scan_once(sct)
                 if hits:
-                    # Bestes Hit (höchste Lookup-Priorität = erstes in der Liste)
+                    # Best hit (highest lookup priority = first in the list)
                     buffer.append(hits[0][1])
                 else:
                     buffer.append("")
 
-                # Nur die letzten N Frames behalten
+                # Keep only the last N frames
                 buffer = buffer[-VOTE_FRAMES:]
 
                 if len(buffer) == VOTE_FRAMES:
@@ -515,7 +514,7 @@ def scan_loop(overlay: "OverlayWindow"):
 
 
 # ---------------------------------------------------------------------------
-# Overlay-Fenster (tkinter – unverändert)
+# Overlay window (tkinter)
 # ---------------------------------------------------------------------------
 
 class OverlayWindow:
@@ -570,12 +569,11 @@ class OverlayWindow:
 
 
 # ---------------------------------------------------------------------------
-# Einstiegspunkt
+# Entry point
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    # Setup-Wizard starten falls --setup übergeben wurde
-    # oder config.json noch kein Theme enthält (Erststart)
+    # Launch the setup wizard if --setup was passed or config.json is missing
     if "--setup" in sys.argv or not Path("config.json").exists():
         from setup_wizard import SetupWizard
         SetupWizard().run()

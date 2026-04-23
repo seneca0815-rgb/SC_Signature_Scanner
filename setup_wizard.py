@@ -128,7 +128,7 @@ class SetupWizard:
         self._build_nav()
         self._render_step()
 
-        # Fenster-X-Button abfangen
+        # Intercept window close button
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
     # ------------------------------------------------------------------
@@ -515,7 +515,7 @@ class SetupWizard:
     # Save & launch
     # ------------------------------------------------------------------
     def _on_close(self):
-        """Roter X-Button – Config nicht speichern, Prozess beenden."""
+        """Red X button — discard config and exit the process."""
         if getattr(self, "_owns_root", True):
             self.root.destroy()
             sys.exit(0)

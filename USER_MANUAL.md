@@ -344,14 +344,14 @@ and audio settings in `config.json`. All other settings are preserved.
 
 ## Legal note
 
-We contacted CIG Player Support regarding this tool. Their response confirmed
+I contacted CIG Player Support regarding this tool. Their response confirmed
 that tools providing unfair advantages, reading game memory, or automating
 gameplay are prohibited by the ToS. SC Signature Reader does none of these
 things — it uses screen capture only, provides no information unavailable to
 any player, and requires full manual control of all gameplay decisions.
 
-We are confident it complies with the Star Citizen Terms of Service.
-This assessment is ours, not CIG's. Use at your own risk.
+I am confident it complies with the Star Citizen Terms of Service.
+This is my personal assessment, not CIG's. Use at your own risk.
 
 *SC Signature Reader is a fan-made community tool.
 Not affiliated with or endorsed by Cloud Imperium Games.

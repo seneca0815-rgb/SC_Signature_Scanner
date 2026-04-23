@@ -1,5 +1,5 @@
 # debug_screenshots.py
-# Teste die Farberkennung direkt auf deinen SC-Screenshots
+# Test colour detection directly on SC screenshots
 import cv2, numpy as np
 from pathlib import Path
 
@@ -7,7 +7,7 @@ HSV_LOW  = np.array([5,  80,  80], dtype=np.uint8)
 HSV_HIGH = np.array([35, 255, 255], dtype=np.uint8)
 MIN_AREA = 80
 
-screenshot_dir = Path(r"E:\SW_Projekte\SC_Signature_Reader\screenshots")  # Pfad anpassen
+screenshot_dir = Path(r"E:\SW_Projekte\SC_Signature_Reader\screenshots")  # adjust path
 
 for img_path in sorted(screenshot_dir.glob("ScreenShot*.jpg"))[:7]:
     bgr = cv2.imread(str(img_path))
@@ -16,7 +16,7 @@ for img_path in sorted(screenshot_dir.glob("ScreenShot*.jpg"))[:7]:
 
     h_img, w_img = bgr.shape[:2]
 
-    # Nur mittlerer Bereich (wo die Signatur sitzt)
+    # Centre region only (where the signature sits)
     x1, y1 = int(w_img * 0.35), int(h_img * 0.22)
     x2, y2 = int(w_img * 0.65), int(h_img * 0.40)
     roi = bgr[y1:y2, x1:x2]
@@ -40,9 +40,9 @@ for img_path in sorted(screenshot_dir.glob("ScreenShot*.jpg"))[:7]:
         found += 1
 
     if found == 0:
-        print("  → Keine Regionen gefunden!")
+        print("  → No regions found!")
 
-        # HSV-Wert direkt am Bildmittelpunkt ausgeben zur Diagnose
+        # Print HSV value at the image centre for diagnosis
         cy, cx = (y2-y1)//2, (x2-x1)//2
         h_val, s_val, v_val = hsv[cy, cx]
         print(f"  → HSV Bildmitte: H={h_val} S={s_val} V={v_val}")
