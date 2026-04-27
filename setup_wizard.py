@@ -59,7 +59,18 @@ RESOLUTIONS = {
     "1920 × 1080":  {"top": 150, "left": 290, "width": 1340, "height": 600},
     "2560 × 1440":  {"top": 200, "left": 380, "width": 1800, "height": 800},
     "3440 × 1440":  {"top": 200, "left": 520, "width": 2400, "height": 800},
+    "3840 × 2160":  {"top": 300, "left": 570, "width": 2700, "height": 1200},
     "Custom (edit config.json manually)": None,
+}
+
+# Extra config keys applied on top of scan_region for specific presets.
+# At 4K the pill bounding boxes are ~2.25× larger in area than at 1440p.
+RESOLUTION_EXTRAS = {
+    "3840 × 2160": {
+        "pill_area_min":    1125,
+        "pill_area_max":    3600,
+        "pill_area_target": 2700,
+    },
 }
 
 # Hotkey options: display label → keyboard-library key name
@@ -252,7 +263,10 @@ class SetupWizard:
         tk.Label(f,
                  text=(
                      "Not sure? Check Display Settings → Resolution.\n"
-                     "The scan region can be fine-tuned in config.json later."
+                     "The scan region can be fine-tuned in config.json later.\n\n"
+                     "Running 4K at 200 % Windows display scaling? Select\n"
+                     "3840 × 2160 — the scanner captures physical pixels\n"
+                     "regardless of the Windows scaling factor."
                  ),
                  bg=C_BG, fg=C_MUTED,
                  font=("Consolas", 10), justify="left").pack(
@@ -533,6 +547,7 @@ class SetupWizard:
         region    = RESOLUTIONS.get(res_label)
         if region:
             cfg["scan_region"] = region
+            cfg.update(RESOLUTION_EXTRAS.get(res_label, {}))
         # Theme
         cfg["theme"] = self._theme_var.get()
         # Hotkey

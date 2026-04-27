@@ -124,7 +124,7 @@ class TestConfigPersistence(unittest.TestCase):
 
     def _run_save(self, resolution_label: str, theme_name: str):
         """Simulate what _save_and_close() does, using the temp directory."""
-        from setup_wizard import RESOLUTIONS
+        from setup_wizard import RESOLUTIONS, RESOLUTION_EXTRAS
 
         with open(self.config_path, encoding="utf-8") as f:
             cfg = json.load(f)
@@ -132,6 +132,7 @@ class TestConfigPersistence(unittest.TestCase):
         region = RESOLUTIONS.get(resolution_label)
         if region:
             cfg["scan_region"] = region
+            cfg.update(RESOLUTION_EXTRAS.get(resolution_label, {}))
         cfg["theme"] = theme_name
 
         with open(self.config_path, "w", encoding="utf-8") as f:
@@ -176,6 +177,40 @@ class TestConfigPersistence(unittest.TestCase):
                 with open(self.config_path) as f:
                     cfg = json.load(f)
                 self.assertEqual(cfg["scan_region"], expected)
+
+    def test_4k_preset_in_resolutions(self):
+        from setup_wizard import RESOLUTIONS
+        self.assertIn("3840 × 2160", RESOLUTIONS)
+        r = RESOLUTIONS["3840 × 2160"]
+        self.assertIsNotNone(r)
+        self.assertEqual(r["top"],    300)
+        self.assertEqual(r["left"],   570)
+        self.assertEqual(r["width"],  2700)
+        self.assertEqual(r["height"], 1200)
+
+    def test_resolution_extras_4k_entry(self):
+        from setup_wizard import RESOLUTION_EXTRAS
+        self.assertIn("3840 × 2160", RESOLUTION_EXTRAS)
+        extras = RESOLUTION_EXTRAS["3840 × 2160"]
+        self.assertEqual(extras["pill_area_min"],    1125)
+        self.assertEqual(extras["pill_area_max"],    3600)
+        self.assertEqual(extras["pill_area_target"], 2700)
+
+    def test_4k_extras_written_to_config(self):
+        self._run_save("3840 × 2160", "vargo")
+        with open(self.config_path) as f:
+            cfg = json.load(f)
+        self.assertEqual(cfg["pill_area_min"],    1125)
+        self.assertEqual(cfg["pill_area_max"],    3600)
+        self.assertEqual(cfg["pill_area_target"], 2700)
+
+    def test_non_4k_preset_does_not_write_pill_area_overrides(self):
+        self._run_save("2560 × 1440", "vargo")
+        with open(self.config_path) as f:
+            cfg = json.load(f)
+        self.assertNotIn("pill_area_min",    cfg)
+        self.assertNotIn("pill_area_max",    cfg)
+        self.assertNotIn("pill_area_target", cfg)
 
     def test_all_themes_can_be_saved(self):
         from setup_wizard import RESOLUTIONS
@@ -510,6 +545,22 @@ class TestSetupWizardCoverageGaps(unittest.TestCase):
         with patch("setup_wizard.CONFIG_PATH", cfg_path):
             wiz._save_and_close()  # must not raise
         wiz.root.destroy.assert_not_called()
+
+    # --- 4K preset: _save_and_close writes pill area extras ---
+
+    def test_save_and_close_4k_writes_pill_area_extras(self):
+        wiz = _bare_wizard(self.tmp)
+        wiz._res_var   = type("V", (), {"get": lambda s: "3840 × 2160"})()
+        wiz._owns_root = False
+        cfg_path = self.tmp / "config.json"
+        cfg_path.write_text("{}", encoding="utf-8")
+        with patch("setup_wizard.CONFIG_PATH", cfg_path):
+            wiz._save_and_close()
+        with open(cfg_path) as f:
+            cfg = json.load(f)
+        self.assertEqual(cfg["pill_area_min"],    1125)
+        self.assertEqual(cfg["pill_area_max"],    3600)
+        self.assertEqual(cfg["pill_area_target"], 2700)
 
     # --- line 567-569: run() ---
 

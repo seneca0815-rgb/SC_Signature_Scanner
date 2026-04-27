@@ -178,10 +178,18 @@ python main.py --setup   # run setup wizard first
 | 1920×1080 | 100 | 150 | 1620 | 680 |
 | 2560×1440 | 130 | 200 | 2160 | 900 |
 | 3440×1440 | 130 | 200 | 3040 | 900 |
+| 3840×2160 | 195 | 300 | 3240 | 1350 |
 
 > **Note:** The region covers the full game viewport (space view, above the cockpit dashboard).
 > Rock labels float anywhere on screen depending on camera angle, so a full-width region is required.
 > The orange "UNKNOWN" label (pre-scan state) is automatically ignored — it contains no digits.
+
+> **4K at 200 % Windows display scaling:** `mss` captures physical pixels regardless of the Windows
+> DPI scaling factor, so always use physical pixel coordinates in `scan_region`.  
+> `find_roi.py` reports *logical* coordinates — multiply every value by your DPI scale factor (2× for
+> 200 %) before pasting them into `config.json`.  
+> Also scale the pill area filters: `pill_area_min 1125`, `pill_area_max 3600`, `pill_area_target 2700`
+> (the setup wizard sets these automatically when you choose the 3840×2160 preset).
 
 ---
 

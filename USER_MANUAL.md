@@ -199,6 +199,7 @@ full-width region is required.
 | 1920 × 1080 | Full HD |
 | 2560 × 1440 | WQHD (default in wizard) |
 | 3440 × 1440 | Ultrawide |
+| 3840 × 2160 | 4K UHD |
 
 For other resolutions, select **Custom** in the wizard and adjust
 `scan_region` manually in `config.json`:
@@ -208,6 +209,13 @@ For other resolutions, select **Custom** in the wizard and adjust
 ```
 
 Use `find_roi.py` to help identify the correct region for your setup.
+
+**4K at 200 % Windows display scaling:** select **3840 × 2160** in the wizard —
+do not pick 1920 × 1080 just because Windows shows a scaled resolution.
+The scanner captures physical pixels directly, and the wizard will also apply
+the correct pill detection area values for 4K automatically.
+If you calibrate the region manually with `find_roi.py`, multiply every
+reported coordinate by 2 (your DPI scale factor) before saving to `config.json`.
 
 ---
 
