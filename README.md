@@ -171,6 +171,32 @@ python main.py --setup   # run setup wizard first
 }
 ```
 
+### Recommended values for 3840×2160
+
+```json
+{
+  "scan_region": { "top": 195, "left": 300, "width": 3240, "height": 1350 },
+  "pill_area_min": 1125,
+  "pill_area_max": 3600,
+  "pill_area_target": 2700,
+  "pill_v_threshold": 130,
+  "pill_aspect_max": 6.0,
+  "max_pills": 3,
+  "vote_frames": 3,
+  "interval_ms": 500,
+  "fuzzy_max_distance": 1,
+  "tesseract_cmd": "C:\\Program Files\\Tesseract-OCR\\tesseract.exe",
+  "overlay_x": 30,
+  "overlay_y": 30,
+  "alpha": 0.88,
+  "bg_color": "#111827",
+  "fg_color": "#e2c97e",
+  "font_family": "Consolas",
+  "font_size": 13,
+  "wrap_width": 400
+}
+```
+
 ### scan_region reference by resolution
 
 | Resolution | top | left | width | height |
