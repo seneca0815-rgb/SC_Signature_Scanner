@@ -131,6 +131,10 @@ class AppState:
     def set_config_path(self, path: Path):
         self._config_path = path
 
+    def save_config(self):
+        """Persist current config to disk (public entry point)."""
+        self._save_config()
+
     def _save_config(self):
         if self._config_path and self._config_path.exists():
             try:

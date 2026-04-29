@@ -150,6 +150,18 @@ class ControlPanel:
                  font=("Courier New", 9),
                  padx=16).pack(anchor="w")
 
+        roi_row = tk.Frame(w, bg=C_BG)
+        roi_row.pack(fill="x", padx=16, pady=(4, 0))
+
+        tk.Button(
+            roi_row, text="SELECT SCAN REGION",
+            bg=C_BORDER, fg=C_TEXT,
+            activebackground=C_SURFACE, activeforeground=C_CYAN,
+            font=("Courier New", 10), relief="flat",
+            padx=10, pady=4,
+            command=self._on_select_roi,
+        ).pack(side="left")
+
         self._build_divider(w)
 
         # ── Last signal ──────────────────────────────────────────────────
@@ -438,6 +450,35 @@ class ControlPanel:
     # ------------------------------------------------------------------
     # Event handlers
     # ------------------------------------------------------------------
+
+    def _on_select_roi(self):
+        import overlay as ov
+        from region_selector import open_region_selector
+
+        was_paused = self._state.paused
+        self._state.set_paused(True)
+        self._win.withdraw()
+
+        region = open_region_selector(
+            self._root,
+            current_region=self._config.get("scan_region"),
+        )
+
+        self._win.deiconify()
+        self._win.lift()
+
+        if region:
+            ov.set_scan_region(region)
+            self._config["scan_region"] = region
+            self._state.save_config()
+            log.info("Scan region updated via selector: %s", region)
+
+        if not was_paused:
+            self._state.set_paused(False)
+
+    def select_roi(self):
+        """Public entry point for hotkey or external callers."""
+        self._on_select_roi()
 
     def _on_toggle(self):
         self._state.toggle_pause()
