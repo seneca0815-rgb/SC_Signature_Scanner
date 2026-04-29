@@ -113,6 +113,28 @@ def _start_hotkey_listener(state: AppState, config: dict, audio: "AudioManager")
 
 
 # ---------------------------------------------------------------------------
+# Region-selector hotkey
+# ---------------------------------------------------------------------------
+
+def _start_region_hotkey(root: tk.Tk, config: dict, panel: "ControlPanel"):
+    region_hotkey = config.get("region_hotkey", "")
+    if not region_hotkey:
+        return
+    try:
+        import keyboard
+    except ImportError:
+        log.warning("'keyboard' package not installed - region hotkey disabled")
+        return
+    def _on_hotkey():
+        root.after(0, panel.select_roi)
+    try:
+        keyboard.add_hotkey(region_hotkey, _on_hotkey)
+        log.info("Region select hotkey registered: %s", region_hotkey)
+    except Exception as e:
+        log.warning("Failed to register region hotkey '%s': %s", region_hotkey, e)
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -229,6 +251,7 @@ def _run():
 
     # --- Hotkey ---
     _start_hotkey_listener(state, config, audio)
+    _start_region_hotkey(root, config, panel)
 
     # --- Startup sound ---
     audio.play_init()

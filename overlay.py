@@ -118,6 +118,23 @@ def init(config_path: Path, lookup_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Runtime reconfiguration
+# ---------------------------------------------------------------------------
+
+
+def set_scan_region(region: dict) -> None:
+    """Update the active scan region without restarting the application."""
+    global ROI, config
+    ROI = region
+    config["scan_region"] = region
+    log.info(
+        "Scan region updated: left=%d top=%d width=%d height=%d",
+        region.get("left", 0), region.get("top", 0),
+        region.get("width", 0), region.get("height", 0),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Step 1: Capture screenshot
 # ---------------------------------------------------------------------------
 
