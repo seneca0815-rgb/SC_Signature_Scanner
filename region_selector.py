@@ -17,6 +17,23 @@ C_BG     = "#000011"
 C_RED    = "#c94f4f"
 
 
+def _compute_region(
+    x0: int, y0: int, x1: int, y1: int, min_size: int = 20
+) -> Optional[dict]:
+    """
+    Convert two drag points into a scan-region dict.
+    Returns None when the resulting rectangle is smaller than min_size in
+    either dimension (accidental click rather than a real drag).
+    """
+    left   = min(x0, x1)
+    top    = min(y0, y1)
+    width  = abs(x1 - x0)
+    height = abs(y1 - y0)
+    if width <= min_size or height <= min_size:
+        return None
+    return {"top": top, "left": left, "width": width, "height": height}
+
+
 def open_region_selector(
     root: tk.Tk,
     current_region: Optional[dict] = None,
@@ -121,18 +138,7 @@ def open_region_selector(
         if _state["start"] is None:
             return
         x0, y0 = _state["start"]
-        x1, y1 = ev.x, ev.y
-        left   = min(x0, x1)
-        top    = min(y0, y1)
-        width  = abs(x1 - x0)
-        height = abs(y1 - y0)
-        if width > 20 and height > 20:
-            result[0] = {
-                "top":    top,
-                "left":   left,
-                "width":  width,
-                "height": height,
-            }
+        result[0] = _compute_region(x0, y0, ev.x, ev.y)
         done.set(True)
 
     def _on_cancel(_ev: tk.Event = None) -> None:
