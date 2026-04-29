@@ -144,6 +144,7 @@ python main.py --setup   # run setup wizard first
 | `overlay_x/y` | Window position when `overlay_position` is `custom` | `30/30` |
 | `alpha` | Window transparency (0–1); applied on startup and theme change | `0.90` |
 | `hotkey` | Pause/resume shortcut | `scroll lock` |
+| `region_hotkey` | Shortcut to open the scan-region picker (optional, e.g. `ctrl+shift+r`) | `""` |
 | `log_level` | Log verbosity: `DEBUG`, `INFO`, `WARNING`, `ERROR` | `INFO` |
 | `audio_enabled` | Enable audio feedback | `true` |
 | `audio_volume` | Master volume (0.0–1.0) | `0.5` |
@@ -257,6 +258,7 @@ sc_signature_reader/
 ├── overlay.py                  ← OCR pipeline, lookup logic, scan loop
 ├── app_state.py                ← shared thread-safe state
 ├── control_panel.py            ← main UI window (Vargo Dynamics branded)
+├── region_selector.py          ← full-screen interactive scan-region picker
 ├── overlay_window.py           ← transparent always-on-top result window
 ├── display_window.py           ← optional cockpit display (VD-SFR1)
 ├── setup_wizard.py             ← first-run configuration wizard
@@ -339,7 +341,7 @@ The **LOG** button in the Control Panel opens this folder directly.
 
 **Pill not found (pills=0 every cycle)**  
 → Check `median_V` in DEBUG log — if > 100, try lowering `pill_v_adaptive_offset`  
-→ The scan region may be outside the game viewport; use `find_roi.py` to re-calibrate  
+→ The scan region may be outside the game viewport; use **SELECT SCAN REGION** in the control panel to re-calibrate interactively, or `find_roi.py` for raw coordinates  
 
 **Too many false pill candidates (pills=6 every cycle)**  
 → Reduce `pill_aspect_max` (e.g. `5.0`) to filter elongated false positives  

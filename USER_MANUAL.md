@@ -1,6 +1,6 @@
 # SC Signature Reader — User Manual
 
-**Vargo Dynamics** · Version 1.3
+**Vargo Dynamics** · Version 1.4.2
 
 ---
 
@@ -30,7 +30,7 @@ Detection is manufacturer-independent: it works regardless of HUD colour
 
 ### Option A — Installer (recommended)
 
-1. Download `SCSigReader_Setup_1.3.exe` from the [Releases page](../../releases).
+1. Download `SCSigReader_Setup_1.4.2.exe` from the [Releases page](../../releases).
 2. Run the installer — it will also install **Tesseract OCR** automatically.
 3. The **Setup Wizard** opens at the end of installation. Complete it once.
 
@@ -71,6 +71,7 @@ The control panel opens when SC Signature Reader starts.
 │ SCANNER                             │
 │  ● ACTIVE                   [PAUSE] │
 │  Hotkey: Scroll Lock                │
+│  [SELECT SCAN REGION]               │
 ├─────────────────────────────────────┤
 │ LAST SIGNAL                         │
 │  ℹ  Quantainium (3x)  ·  Legendary  │
@@ -95,6 +96,7 @@ The control panel opens when SC Signature Reader starts.
 | **● ACTIVE / PAUSED** | Current scanner state. Green = scanning, red = paused. |
 | **PAUSE / RESUME** | Toggle the scanner on/off. Same as pressing the hotkey. |
 | **Hotkey** | The keyboard shortcut configured in the wizard. |
+| **SELECT SCAN REGION** | Opens the interactive region picker (see below). |
 | **LAST SIGNAL** | The most recent recognised signature and its lookup result. |
 | **THEME** | Change the overlay appearance live. The change is saved automatically. |
 | **AUDIO** | Master on/off, volume slider and signal sound toggle. |
@@ -201,14 +203,33 @@ full-width region is required.
 | 3440 × 1440 | Ultrawide |
 | 3840 × 2160 | 4K UHD |
 
-For other resolutions, select **Custom** in the wizard and adjust
-`scan_region` manually in `config.json`:
+For other resolutions, select **Custom** in the wizard and use the
+**SELECT SCAN REGION** button in the control panel to set the region interactively.
+
+### Interactive region picker
+
+Click **SELECT SCAN REGION** in the control panel (or press the optional
+`region_hotkey` if configured). The screen dims and a crosshair appears:
+
+1. Click and drag over the area of the screen where the HUD signature pill appears.
+2. A cyan rectangle shows your selection; coordinates and size are displayed live.
+3. Release the mouse button to confirm — the new region is applied immediately
+   and saved to `config.json`.
+4. Press **ESC** at any time to cancel without making any changes.
+
+The dashed gold rectangle shows the currently active scan region so you always
+know your starting point.
+
+> **Tip for fixed FOV / no head-tracking:** draw a tight rectangle around the
+> HUD pill position rather than covering the full viewport. A smaller scan region
+> reduces CPU load and speeds up each detection cycle.
+
+You can also set `region_hotkey` in `config.json` to open the picker without
+touching the control panel:
 
 ```json
-"scan_region": { "top": 130, "left": 200, "width": 2160, "height": 900 }
+"region_hotkey": "ctrl+shift+r"
 ```
-
-Use `find_roi.py` to help identify the correct region for your setup.
 
 **4K at 200 % Windows display scaling:** select **3840 × 2160** in the wizard —
 do not pick 1920 × 1080 just because Windows shows a scaled resolution.
@@ -284,7 +305,8 @@ becomes distracting quickly. Enable it in the control panel or
 
 **Pill not found (pills=0 every cycle)**
 - Check `median_V` in DEBUG log — if > 100, try lowering `pill_v_adaptive_offset`.
-- The scan region may be outside the game viewport — use `find_roi.py` to re-calibrate.
+- The scan region may be outside the game viewport — use **SELECT SCAN REGION** in the
+  control panel to re-calibrate interactively, or `find_roi.py` for raw coordinates.
 
 **Too many false pill candidates**
 - Reduce `pill_aspect_max` (e.g. `5.0`) to filter elongated false positives.
