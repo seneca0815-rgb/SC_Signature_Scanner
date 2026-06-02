@@ -59,6 +59,9 @@ RESOLUTIONS = {
     "1920 × 1080":  {"top": 150, "left": 290, "width": 1340, "height": 600},
     "2560 × 1440":  {"top": 200, "left": 380, "width": 1800, "height": 800},
     "3440 × 1440":  {"top": 200, "left": 520, "width": 2400, "height": 800},
+    "3840 × 1440":  {"top": 200, "left": 600, "width": 2640, "height": 800},
+    "5120 × 1440":  {"top": 200, "left": 770, "width": 3570, "height": 800},
+    "3840 × 2160":  {"top": 300, "left": 570, "width": 2700, "height": 1200},
     "Custom (edit config.json manually)": None,
 }
 

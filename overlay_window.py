@@ -112,6 +112,16 @@ class OverlayWindow:
         self._custom_y  = config.get("overlay_y", 30)
         self._position  = config.get("overlay_position", "custom")
 
+        # Reset stale absolute coordinates that fall outside the current screen
+        # (e.g. config saved on a smaller monitor, now running on a widescreen).
+        sw = root.winfo_screenwidth()
+        sh = root.winfo_screenheight()
+        if self._custom_x >= sw or self._custom_y >= sh:
+            self._custom_x = 30
+            self._custom_y = 30
+            config["overlay_x"] = 30
+            config["overlay_y"] = 30
+
         self._win = tk.Toplevel(root)
         self._win.title("SC Signature Reader – Overlay")
         self._win.overrideredirect(True)
