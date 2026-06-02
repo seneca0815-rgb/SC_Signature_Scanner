@@ -63,9 +63,9 @@ test_fixtures/**/*.png
 old/
 
 # ---------------------------------------------------------------
-# Claude Code
+# Claude Code — track .claude/ (skills, settings.json)
+# settings.local.json is excluded via .claude/.gitignore
 # ---------------------------------------------------------------
-.claude/
 
 # ---------------------------------------------------------------
 # Editor
