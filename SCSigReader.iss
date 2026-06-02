@@ -2,7 +2,7 @@
 ; Build: iscc SCSigReader.iss
 
 #define AppName    "SC Signature Reader"
-#define AppVersion "1.0"
+#define AppVersion "1.4.3"
 #define AppExe     "SCSigReader.exe"
 #define Publisher  "Seneca0815"
 

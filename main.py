@@ -22,7 +22,7 @@ from control_panel import ControlPanel
 from logger_setup import get_logger, setup_logger
 from tray_icon import TrayIcon
 
-VERSION = "1.0"
+VERSION = "1.4.3"
 
 # Module-level logger – handlers are added by setup_logger() in main()
 log = get_logger()
