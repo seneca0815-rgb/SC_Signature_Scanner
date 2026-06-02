@@ -6,15 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **All new development happens on the `v2` branch.**
 `main` is frozen at v1.4.4 (tkinter baseline) — critical hotfixes only.
-Before starting any work, confirm you are on `v2`:
 ```bash
-git branch          # should show * v2
-git checkout v2     # if not already on v2
+git branch          # must show * v2
+git checkout v2     # if not already there
 ```
 
 ## What This Project Does
 
-SC Signature Reader is a ToS-compliant screen-OCR overlay for Star Citizen. It detects the signature display pill in the HUD (manufacturer-independent — works for Aegis, Anvil, Krueger, RSI, Argo), reads the signature number via OCR, looks it up in a mineral database, and displays the matched mineral + multiplier in an always-on-top overlay. No memory reading or DLL injection — pure screen analysis.
+SC Signature Reader is a ToS-compliant screen-OCR overlay for Star Citizen. It detects the signature display pill in the HUD (manufacturer-independent), reads the signature number via OCR, and displays the matched mineral + multiplier in an always-on-top overlay. No memory reading or DLL injection — pure screen analysis.
 
 ## Common Commands
 
@@ -26,30 +25,25 @@ python main.py
 python main.py --setup
 
 # Run all tests (mirrors CI)
-python -m pytest tests/ -v
+python -m pytest tests/ -v --ignore=tests/test_ocr_fixtures.py
 
-# Run a single test file
+# Run a single test file / by name
 python -m pytest tests/test_core.py -v
-
-# Run a single test by name
 python -m pytest tests/test_core.py -v -k "test_normalize"
 
-# Copy example config before first run or testing
-cp config.example.json config.json
+# Pre-release quality gate (tests + coverage ≥ 90% + version consistency)
+python scripts/check_release.py
 
-# OCR debug — saves 1_original.png and 2_preprocessed.png
-python scripts/test_ocr.py
-
-# Calibrate scan region interactively
+# Interactive scan region picker
 python scripts/find_roi.py
 
-# Build executable (requires PyInstaller)
-pyinstaller --onefile --noconsole --name SCSigReader main.py \
-  --add-data "config.example.json;." --add-data "lookup.json;." \
-  --add-data "themes.py;." --add-data "overlay_window.py;." \
-  --add-data "control_panel.py;." --add-data "setup_wizard.py;." \
-  --add-data "tray_icon.py;." --add-data "app_state.py;." \
-  --add-data "overlay.py;."
+# Rebuild brand assets (icons, installer BMPs, theme preview)
+python scripts/generate_assets.py
+python scripts/generate_theme_preview.py
+
+# Rebuild VargoMono font after glyph edits
+fontforge -script scripts/ff_edit_glyphs.py
+python scripts/build_vargo_font_ft.py
 ```
 
 ## Architecture Overview
@@ -59,84 +53,83 @@ pyinstaller --onefile --noconsole --name SCSigReader main.py \
 ```
 [Game Screen]
   → mss captures ROI (500 ms interval)
-  → find_signature_pills(): adaptive V-threshold (max(base, median_V + offset))
-      morphological closing → contours → bbox filter (area 500–1600 px², aspect 2–6)
-      sort by |area − 1200 px²| (closest to signature pill size first)
-  → ocr_pill() per candidate (up to max_pills=3):
-      crop strip + scale to 60 px height
-      Blue channel + Otsu threshold → invert (black text on white)
-      Tesseract PSM 7 (single line, digits 0–9 only)
-  → lookup_text_strict() in hot path (exact + substring only)
+  → find_signature_pills(): adaptive V-threshold → morphological closing
+      → contour bbox filter (area 500–1600 px², aspect 2–6)
+      → sort by proximity to 1200 px² target
+  → ocr_pill() per candidate:
+      Blue channel + Otsu → Tesseract PSM 7 (digits only)
+  → lookup_text_strict() hot path (exact + substring)
       fuzzy Levenshtein fallback after all pills exhausted
-  → majority voting over N frames (default 3) to suppress flicker
-  → OverlayWindow / DisplayWindow shows result
+  → majority vote (3 frames) → OverlayWindow shows result
 ```
 
 ### Module Roles
 
 | File | Role |
 |------|------|
-| `main.py` | Entry point — creates AppState, starts threads, opens ControlPanel, runs tkinter mainloop |
-| `overlay.py` | Full OCR pipeline (capture → detect → preprocess → OCR → normalize → lookup → vote) |
-| `app_state.py` | Thread-safe shared state (paused flag, last\_signal, history, theme, config persistence) |
-| `control_panel.py` | Main control window (history, theme switcher, overlay position, help text) |
-| `overlay_window.py` | Transparent always-on-top result window; rarity colour coding; named position presets |
-| `display_window.py` | Optional "VD-SFR1" cockpit display (slim or instrument mode) |
-| `setup_wizard.py` | First-run wizard (resolution preset selection, scan region, theme) |
-| `themes.py` | 6 built-in themes: `vargo` (default), `dark-gold`, `dark-blue`, `cockpit`, `minimal`, `ghost` |
+| `main.py` | Entry point — loads VargoMono font, creates AppState, starts threads, runs tkinter mainloop |
+| `overlay.py` | Full OCR pipeline (capture → detect → preprocess → OCR → lookup → vote) |
+| `app_state.py` | Thread-safe shared state; `save_config()` persists to `%APPDATA%` when frozen |
+| `control_panel.py` | Main control window (history, theme, position, audio) |
+| `overlay_window.py` | Transparent always-on-top result window; rarity colour coding; position presets |
+| `region_selector.py` | Full-screen interactive drag-to-select for the OCR scan region |
+| `setup_wizard.py` | First-run wizard; enumerates monitors via mss, pre-selects largest |
+| `font_loader.py` | Loads `VargoMono-Regular.ttf` into Windows GDI so tkinter can use it by name |
+| `themes.py` | 6 built-in themes; `font_family` is `"VargoMono"` (fallback: Consolas) |
 | `tray_icon.py` | System tray icon via pystray (daemon thread) |
 | `lookup.json` | 163 entries: signature number → mineral name + multiplier |
 
 ### Threading Model
 
-- **Main thread** — tkinter mainloop (all UI windows)
+- **Main thread** — tkinter mainloop; all UI widget writes must happen here
 - **Scan thread** — background OCR loop; calls `overlay.scan_once()`, respects `AppState.paused`
 - **Tray thread** — pystray daemon
-- **Hotkey thread** — `keyboard` library (F9 toggle pause by default)
+- **Hotkey thread** — `keyboard` library
 
-UI updates from background threads use `tk.after(0, callback)` — never write to widgets directly from non-main threads.
+Cross-thread UI updates: `root.after(0, callback)` — never write to widgets directly from background threads.
 
 ### State Management
 
-`AppState` is the single source of truth. Components register callbacks; AppState notifies them when state changes. All writes to shared fields are protected by `_lock`.
+`AppState` is the single source of truth. Components register callbacks via `state.register_callback(fn)`; AppState calls all callbacks on every state change. All shared-field writes protected by `_lock`.
 
-### Lookup Database
+`save_config()` is public and called directly from control panel event handlers (position, audio, theme). Volume changes are debounced 800 ms before saving.
 
-`lookup.json` maps signature strings to `{mineral, multiplier}`. Lookup has three stages:
-1. Exact match
-2. Substring containment
-3. Fuzzy (Levenshtein distance ≤ `fuzzy_max_distance`, default 1)
+### Config Path (installed vs. dev)
 
-## Configuration (`config.json`)
+When frozen (installed), `config.json` lives at `%APPDATA%\VargoDynamics\SCSigReader\config.json` — not in `Program Files` — so the app can write it without admin rights. On first launch after install, the file is migrated automatically from the install directory. In dev, it's `BASE_DIR/config.json`.
 
-User copies `config.example.json` → `config.json`. Key fields:
+### Font System
 
-| Key | Purpose | Typical Value (1440p) |
-|-----|---------|----------------------|
-| `scan_region` | Screen area to analyse | `{top:130,left:200,width:2160,height:900}` |
-| `pill_v_threshold` | Base V-channel brightness threshold | `130` |
-| `pill_v_adaptive_offset` | Auto-raise threshold on bright backgrounds | `60` |
-| `pill_area_min/max` | Pill bounding-box area filter (px²) | `500` / `1600` |
-| `pill_aspect_min/max` | Pill aspect ratio filter | `2.0` / `6.0` |
-| `pill_area_target` | Target area for candidate ranking | `1200` |
-| `max_pills` | Max candidates to OCR per cycle | `3` |
-| `vote_frames` | Frames required for majority vote | `3` |
-| `interval_ms` | Scan frequency | `500` |
-| `fuzzy_max_distance` | Levenshtein tolerance | `1` |
-| `tesseract_cmd` | Path to `tesseract.exe` | `C:\Program Files\Tesseract-OCR\tesseract.exe` |
-| `theme` | Active colour theme | `vargo` |
-| `overlay_position` | Named position preset or `custom` | `custom` |
-| `alpha` | Window transparency applied via wm_attributes | `0.90` |
-| `hotkey` | Pause/resume shortcut | `scroll lock` |
+`font_loader.load_vargo_font()` is called in `main.py` before any `tk.Tk()` is created. It loads `fonts/VargoMono/VargoMono-Regular.ttf` into Windows GDI via `AddFontResourceExW` (FR_PRIVATE). If the font file is missing or the platform is non-Windows, it returns `"Consolas"`. The returned name is exported as `UI_FONT` from `main.py` but fonts are also referenced directly by name in themes/UI code.
 
 ## CI/CD
 
-- **`.github/workflows/ci.yml`** — runs all test suites on every push/PR (Windows-latest, Python 3.11)
-- **`.github/workflows/release.yml`** — triggered by `v*` tags; runs tests, installs Tesseract via Chocolatey, bundles with PyInstaller, packages with Inno Setup (`SCSigReader.iss`), publishes GitHub Release
+- **`ci.yml`** — full test suite + coverage XML + cyclomatic complexity + linting on every push/PR
+- **`release.yml`** — triggered by `v*` tags on `v2`; tests → Tesseract → PyInstaller → Inno Setup → GitHub Release
+- Pre-release gate: `python scripts/check_release.py` (must pass before tagging)
 
 ## Key Design Constraints
 
-- Windows-only runtime (mss, pystray, keyboard, Tesseract path assumptions)
-- tkinter UI must only be touched from the main thread — use `after(0, ...)` for cross-thread updates
-- `lookup.json` is the sole source of mineral data; OCR normalization must match its key format exactly
-- The control panel minimises to tray on close — it must never destroy the tkinter root (that would exit the app)
+- Windows-only runtime (mss, pystray, keyboard, Tesseract, GDI font loading)
+- tkinter mainloop owns all widget state — use `after(0, ...)` for cross-thread updates
+- `lookup.json` is the sole mineral data source; OCR normalisation must match key format exactly
+- Control panel minimises to tray on close — never destroy the tkinter root
+
+## V2 Roadmap
+
+Active development target. See `CONTEXT.md` for the full feature list. Migration order:
+1. **OverlayWindow** → PySide6 (first, simplest: one label, no complex layout)
+2. **ControlPanel** → PySide6
+3. **SetupWizard** → PySide6
+
+Qt binding: **PySide6** (LGPL, MIT-compatible). PySide6 cross-thread updates use `QMetaObject.invokeMethod` or signals instead of `tk.after(0, ...)`.
+
+## Claude Code Skills
+
+Project-local skills in `.claude/skills/`:
+
+| Skill | When to use |
+|-------|-------------|
+| `pill-detection` | Detection pipeline, threshold tuning, new ship/background calibration |
+| `vargo-brand-style` | Colours, VargoMono typography, QSS guidelines, Spectrum voice |
+| `release-process` | Version bump, changelog, tag, push, GHA monitoring |
