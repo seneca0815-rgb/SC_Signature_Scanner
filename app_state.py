@@ -132,6 +132,10 @@ class AppState:
         self._config_path = path
 
     def save_config(self):
+        """Persist current config to disk (public entry point)."""
+        self._save_config()
+
+    def _save_config(self):
         if self._config_path and self._config_path.exists():
             try:
                 with open(self._config_path, "w", encoding="utf-8") as f:
@@ -139,9 +143,6 @@ class AppState:
                 log.debug("Config saved to %s", self._config_path)
             except Exception as e:
                 log.warning("Config save failed: %s", e)
-
-    def _save_config(self):
-        self.save_config()
 
     # ------------------------------------------------------------------
     # Change notification

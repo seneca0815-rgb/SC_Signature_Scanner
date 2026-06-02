@@ -1015,6 +1015,132 @@ class TestSetupWizardUI(unittest.TestCase):
 
 
 # ===========================================================================
+# 4b. ControlPanel – SELECT SCAN REGION
+# ===========================================================================
+
+class TestControlPanelROI(unittest.TestCase):
+    """_on_select_roi() and select_roi(): config update, state management."""
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            cls.root = tk.Tk()
+            cls.root.withdraw()
+        except tk.TclError as exc:
+            raise unittest.SkipTest(f"Tk not available: {exc}")
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.root.destroy()
+        except Exception:
+            pass
+
+    def setUp(self):
+        self.config = _make_config()
+        self.state  = AppState(self.config)
+        self.fake_overlay = type("FakeOverlay", (), {
+            "apply_theme":  lambda self, t: None,
+            "set_position": lambda self, p: None,
+        })()
+        self.panel = ControlPanel(
+            self.root, self.config, self.state,
+            self.fake_overlay, PROJECT_ROOT)
+        _pump(self.root)
+
+    def tearDown(self):
+        try:
+            _pump(self.root)
+        except Exception:
+            pass
+        try:
+            self.panel._win.destroy()
+        except Exception:
+            pass
+
+    _REGION = {"top": 100, "left": 200, "width": 800, "height": 400}
+
+    def _call_roi(self, returned_region):
+        """Call _on_select_roi() with open_region_selector mocked."""
+        with unittest.mock.patch(
+                "region_selector.open_region_selector",
+                return_value=returned_region), \
+             unittest.mock.patch("overlay.set_scan_region"), \
+             unittest.mock.patch.object(self.state, "save_config"):
+            self.panel._on_select_roi()
+
+    # --- region confirmed ---
+
+    def test_confirmed_region_updates_config(self):
+        self._call_roi(self._REGION)
+        self.assertEqual(self.config.get("scan_region"), self._REGION)
+
+    def test_confirmed_region_calls_set_scan_region(self):
+        with unittest.mock.patch(
+                "region_selector.open_region_selector",
+                return_value=self._REGION), \
+             unittest.mock.patch("overlay.set_scan_region") as mock_set, \
+             unittest.mock.patch.object(self.state, "save_config"):
+            self.panel._on_select_roi()
+        mock_set.assert_called_once_with(self._REGION)
+
+    def test_confirmed_region_saves_config(self):
+        with unittest.mock.patch(
+                "region_selector.open_region_selector",
+                return_value=self._REGION), \
+             unittest.mock.patch("overlay.set_scan_region"), \
+             unittest.mock.patch.object(self.state, "save_config") as mock_save:
+            self.panel._on_select_roi()
+        mock_save.assert_called_once()
+
+    # --- cancelled (None returned) ---
+
+    def test_cancel_does_not_update_config(self):
+        self._call_roi(None)
+        self.assertNotIn("scan_region", self.config)
+
+    def test_cancel_does_not_call_set_scan_region(self):
+        with unittest.mock.patch(
+                "region_selector.open_region_selector",
+                return_value=None), \
+             unittest.mock.patch("overlay.set_scan_region") as mock_set:
+            self.panel._on_select_roi()
+        mock_set.assert_not_called()
+
+    # --- scanner pause / resume ---
+
+    def test_scanner_is_paused_during_selection(self):
+        paused_states = []
+        def capture_state(root, current_region=None):
+            paused_states.append(self.state.paused)
+            return None
+        with unittest.mock.patch(
+                "region_selector.open_region_selector",
+                side_effect=capture_state), \
+             unittest.mock.patch("overlay.set_scan_region"):
+            self.panel._on_select_roi()
+        self.assertTrue(paused_states[0])
+
+    def test_scanner_resumes_after_selection_if_was_active(self):
+        self.assertFalse(self.state.paused)  # pre-condition
+        self._call_roi(None)
+        self.assertFalse(self.state.paused)
+
+    def test_scanner_stays_paused_if_was_paused_before(self):
+        self.state.set_paused(True)
+        self._call_roi(None)
+        self.assertTrue(self.state.paused)
+
+    # --- public wrapper ---
+
+    def test_select_roi_delegates_to_on_select_roi(self):
+        with unittest.mock.patch.object(
+                self.panel, "_on_select_roi") as mock_inner:
+            self.panel.select_roi()
+        mock_inner.assert_called_once()
+
+
+# ===========================================================================
 # 5. ControlPanel – Audio
 # ===========================================================================
 
@@ -1168,6 +1294,7 @@ if __name__ == "__main__":
         TestAppState,
         TestOverlayWindow,
         TestControlPanel,
+        TestControlPanelROI,
         TestControlPanelAudio,
         TestSetupWizardUI,
     ]:

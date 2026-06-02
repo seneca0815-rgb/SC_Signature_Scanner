@@ -31,6 +31,8 @@
   "_overlay_position": "Preset: custom | top_left | top_center | top_right | upper_left | upper_center | upper_right | center_left | center | center_right | bottom_left | bottom_center | bottom_right",
   "overlay_position": "custom",
   "hotkey": "scroll lock",
+  "_region_hotkey": "Optional shortcut to open the scan-region picker, e.g. ctrl+shift+r. Leave empty to disable.",
+  "region_hotkey": "",
 
   "_logging": "Log level: DEBUG, INFO, WARNING, ERROR",
   "log_level": "INFO",

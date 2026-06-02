@@ -26,19 +26,19 @@ jobs:
         shell: pwsh
 
       - name: Run tests
-        run: python -m pytest tests/test_core.py tests/test_setup_wizard.py tests/test_integration.py tests/test_ui_acceptance.py tests/test_installer.py tests/test_audio.py tests/test_tray_icon.py tests/test_main.py tests/test_logger.py -v --junitxml=test-results.xml --cov=app_state --cov=audio_manager --cov=control_panel --cov=logger_setup --cov=main --cov=overlay --cov=overlay_window --cov=setup_wizard --cov=themes --cov=tray_icon --cov-report=xml:coverage.xml
+        run: python -m pytest tests/test_core.py tests/test_setup_wizard.py tests/test_integration.py tests/test_ui_acceptance.py tests/test_installer.py tests/test_audio.py tests/test_tray_icon.py tests/test_main.py tests/test_logger.py tests/test_region_selector.py -v --junitxml=test-results.xml --cov=app_state --cov=audio_manager --cov=control_panel --cov=logger_setup --cov=main --cov=overlay --cov=overlay_window --cov=region_selector --cov=setup_wizard --cov=themes --cov=tray_icon --cov-report=xml:coverage.xml
 
       - name: Cyclomatic complexity
         shell: pwsh
         continue-on-error: true
         run: |
-          python -m radon cc -j app_state.py audio_manager.py control_panel.py logger_setup.py main.py overlay.py overlay_window.py setup_wizard.py themes.py tray_icon.py | Out-File -FilePath radon-results.txt -Encoding utf8
+          python -m radon cc -j app_state.py audio_manager.py control_panel.py logger_setup.py main.py overlay.py overlay_window.py region_selector.py setup_wizard.py themes.py tray_icon.py | Out-File -FilePath radon-results.txt -Encoding utf8
 
       - name: Linting
         shell: pwsh
         continue-on-error: true
         run: |
-          $out = python -m flake8 app_state.py audio_manager.py control_panel.py logger_setup.py main.py overlay.py overlay_window.py setup_wizard.py themes.py tray_icon.py --count -q
+          $out = python -m flake8 app_state.py audio_manager.py control_panel.py logger_setup.py main.py overlay.py overlay_window.py region_selector.py setup_wizard.py themes.py tray_icon.py --count -q
           if ($out) { $out | Out-File -FilePath flake8-results.txt -Encoding utf8 }
           else { Set-Content -Path flake8-results.txt -Value "" }
 

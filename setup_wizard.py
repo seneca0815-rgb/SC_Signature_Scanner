@@ -66,6 +66,21 @@ RESOLUTIONS = {
     "Custom (edit config.json manually)": None,
 }
 
+# Extra config keys applied on top of scan_region for specific presets.
+# At 4K the pill bounding boxes are ~2.25× larger in area than at 1440p.
+RESOLUTION_EXTRAS = {
+    "3840 × 2160": {
+        "pill_area_min":    1125,
+        "pill_area_max":    3600,
+        "pill_area_target": 2700,
+    },
+    "5120 × 2160": {
+        "pill_area_min":    1125,
+        "pill_area_max":    3600,
+        "pill_area_target": 2700,
+    },
+}
+
 # Baseline used for proportional scan_region scaling
 _BASELINE_W, _BASELINE_H = 2560, 1440
 _BASELINE = RESOLUTIONS["2560 × 1440"]
@@ -212,7 +227,7 @@ class SetupWizard:
         self._build_nav()
         self._render_step()
 
-        # Fenster-X-Button abfangen
+        # Intercept window close button
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
     # ------------------------------------------------------------------
@@ -376,6 +391,10 @@ class SetupWizard:
                 f"Note: {self._detected_res} was auto-computed from the\n"
                 "2560×1440 baseline. Verify with scripts/find_roi.py.",
             )
+        hint_lines.append(
+            "Running 4K at 200 % Windows scaling? Select 3840 × 2160 —\n"
+            "the scanner captures physical pixels regardless of scaling."
+        )
         tk.Label(f,
                  text="\n".join(hint_lines),
                  bg=C_BG, fg=C_MUTED,
@@ -639,7 +658,7 @@ class SetupWizard:
     # Save & launch
     # ------------------------------------------------------------------
     def _on_close(self):
-        """Roter X-Button – Config nicht speichern, Prozess beenden."""
+        """Red X button — discard config and exit the process."""
         if getattr(self, "_owns_root", True):
             self.root.destroy()
             sys.exit(0)
@@ -657,6 +676,7 @@ class SetupWizard:
         region    = self._monitor_choices.get(res_label)
         if region:
             cfg["scan_region"] = region
+            cfg.update(RESOLUTION_EXTRAS.get(res_label, {}))
         # Theme
         cfg["theme"] = self._theme_var.get()
         # Hotkey

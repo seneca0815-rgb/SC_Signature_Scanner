@@ -1312,6 +1312,63 @@ class TestLegacyOverlayWindow(unittest.TestCase):
         win.root.withdraw.assert_called()
 
 
+# ---------------------------------------------------------------------------
+# 17. overlay.set_scan_region()
+# ---------------------------------------------------------------------------
+
+class TestSetScanRegion(unittest.TestCase):
+    """Cover overlay.set_scan_region() — live ROI update without restart."""
+
+    def setUp(self):
+        self._orig_roi    = ov.ROI
+        self._orig_config = ov.config
+        ov.ROI    = {}
+        ov.config = {}
+
+    def tearDown(self):
+        ov.ROI    = self._orig_roi
+        ov.config = self._orig_config
+
+    def test_updates_roi_global(self):
+        region = {"top": 100, "left": 200, "width": 800, "height": 400}
+        ov.set_scan_region(region)
+        self.assertEqual(ov.ROI, region)
+
+    def test_updates_config_scan_region(self):
+        region = {"top": 50, "left": 100, "width": 500, "height": 300}
+        ov.set_scan_region(region)
+        self.assertEqual(ov.config["scan_region"], region)
+
+    def test_replaces_previous_roi(self):
+        ov.ROI = {"top": 0, "left": 0, "width": 100, "height": 100}
+        new_region = {"top": 200, "left": 300, "width": 1000, "height": 500}
+        ov.set_scan_region(new_region)
+        self.assertEqual(ov.ROI, new_region)
+
+    def test_roi_and_config_stay_in_sync(self):
+        region = {"top": 10, "left": 20, "width": 640, "height": 360}
+        ov.set_scan_region(region)
+        self.assertIs(ov.config["scan_region"], ov.ROI)
+
+
+# ---------------------------------------------------------------------------
+# 18. AppState.save_config() public wrapper
+# ---------------------------------------------------------------------------
+
+class TestAppStateSaveConfigPublic(unittest.TestCase):
+
+    def setUp(self):
+        sys.path.insert(0, str(PROJECT_ROOT))
+        from app_state import AppState
+        self.AppState = AppState
+
+    def test_save_config_delegates_to_private(self):
+        state = self.AppState({})
+        with patch.object(state, "_save_config") as mock_save:
+            state.save_config()
+        mock_save.assert_called_once()
+
+
 if __name__ == "__main__":
     loader = unittest.TestLoader()
     suite  = unittest.TestSuite()
@@ -1337,6 +1394,8 @@ if __name__ == "__main__":
         TestLegacyOverlayWindow,
         TestAppStatePerformance,
         TestAppStateConfigPersistence,
+        TestSetScanRegion,
+        TestAppStateSaveConfigPublic,
     ]:
         suite.addTests(loader.loadTestsFromTestCase(cls))
 

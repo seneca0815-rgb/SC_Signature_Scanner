@@ -1,4 +1,4 @@
-# find_roi.py  – Mausposition live anzeigen (kein extra Package nötig)
+# find_roi.py  – display live mouse position (no extra package required)
 import time
 import ctypes
 import ctypes.wintypes
@@ -10,7 +10,7 @@ def _get_cursor_pos():
     _user32.GetCursorPos(ctypes.byref(pt))
     return pt.x, pt.y
 
-print("Maus über den Signatur-Text bewegen. Ctrl+C zum Beenden.")
+print("Move the mouse over the signature text. Ctrl+C to quit.")
 try:
     while True:
         x, y = _get_cursor_pos()

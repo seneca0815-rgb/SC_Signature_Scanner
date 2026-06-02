@@ -144,6 +144,7 @@ python main.py --setup   # run setup wizard first
 | `overlay_x/y` | Window position when `overlay_position` is `custom` | `30/30` |
 | `alpha` | Window transparency (0–1); applied on startup and theme change | `0.90` |
 | `hotkey` | Pause/resume shortcut | `scroll lock` |
+| `region_hotkey` | Shortcut to open the scan-region picker (optional, e.g. `ctrl+shift+r`) | `""` |
 | `log_level` | Log verbosity: `DEBUG`, `INFO`, `WARNING`, `ERROR` | `INFO` |
 | `audio_enabled` | Enable audio feedback | `true` |
 | `audio_volume` | Master volume (0.0–1.0) | `0.5` |
@@ -171,6 +172,32 @@ python main.py --setup   # run setup wizard first
 }
 ```
 
+### Recommended values for 3840×2160
+
+```json
+{
+  "scan_region": { "top": 195, "left": 300, "width": 3240, "height": 1350 },
+  "pill_area_min": 1125,
+  "pill_area_max": 3600,
+  "pill_area_target": 2700,
+  "pill_v_threshold": 130,
+  "pill_aspect_max": 6.0,
+  "max_pills": 3,
+  "vote_frames": 3,
+  "interval_ms": 500,
+  "fuzzy_max_distance": 1,
+  "tesseract_cmd": "C:\\Program Files\\Tesseract-OCR\\tesseract.exe",
+  "overlay_x": 30,
+  "overlay_y": 30,
+  "alpha": 0.88,
+  "bg_color": "#111827",
+  "fg_color": "#e2c97e",
+  "font_family": "Consolas",
+  "font_size": 13,
+  "wrap_width": 400
+}
+```
+
 ### scan_region reference by resolution
 
 | Resolution | top | left | width | height |
@@ -178,10 +205,18 @@ python main.py --setup   # run setup wizard first
 | 1920×1080 | 100 | 150 | 1620 | 680 |
 | 2560×1440 | 130 | 200 | 2160 | 900 |
 | 3440×1440 | 130 | 200 | 3040 | 900 |
+| 3840×2160 | 195 | 300 | 3240 | 1350 |
 
 > **Note:** The region covers the full game viewport (space view, above the cockpit dashboard).
 > Rock labels float anywhere on screen depending on camera angle, so a full-width region is required.
 > The orange "UNKNOWN" label (pre-scan state) is automatically ignored — it contains no digits.
+
+> **4K at 200 % Windows display scaling:** `mss` captures physical pixels regardless of the Windows
+> DPI scaling factor, so always use physical pixel coordinates in `scan_region`.  
+> `find_roi.py` reports *logical* coordinates — multiply every value by your DPI scale factor (2× for
+> 200 %) before pasting them into `config.json`.  
+> Also scale the pill area filters: `pill_area_min 1125`, `pill_area_max 3600`, `pill_area_target 2700`
+> (the setup wizard sets these automatically when you choose the 3840×2160 preset).
 
 ---
 
@@ -223,6 +258,7 @@ sc_signature_reader/
 ├── overlay.py                  ← OCR pipeline, lookup logic, scan loop
 ├── app_state.py                ← shared thread-safe state
 ├── control_panel.py            ← main UI window (Vargo Dynamics branded)
+├── region_selector.py          ← full-screen interactive scan-region picker
 ├── overlay_window.py           ← transparent always-on-top result window
 ├── display_window.py           ← optional cockpit display (VD-SFR1)
 ├── setup_wizard.py             ← first-run configuration wizard
@@ -305,7 +341,7 @@ The **LOG** button in the Control Panel opens this folder directly.
 
 **Pill not found (pills=0 every cycle)**  
 → Check `median_V` in DEBUG log — if > 100, try lowering `pill_v_adaptive_offset`  
-→ The scan region may be outside the game viewport; use `find_roi.py` to re-calibrate  
+→ The scan region may be outside the game viewport; use **SELECT SCAN REGION** in the control panel to re-calibrate interactively, or `find_roi.py` for raw coordinates  
 
 **Too many false pill candidates (pills=6 every cycle)**  
 → Reduce `pill_aspect_max` (e.g. `5.0`) to filter elongated false positives  
