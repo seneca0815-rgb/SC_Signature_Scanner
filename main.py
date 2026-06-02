@@ -18,6 +18,7 @@ import json
 from pathlib import Path
 
 import tkinter as tk
+from PySide6.QtWidgets import QApplication
 
 from app_state import AppState
 from audio_manager import AudioManager
@@ -25,6 +26,10 @@ from control_panel import ControlPanel
 from font_loader import load_vargo_font
 from logger_setup import get_logger, setup_logger
 from tray_icon import TrayIcon
+
+# QApplication must exist before any QWidget is created.
+# Created here once; additional calls return the existing instance.
+_qt_app = QApplication.instance() or QApplication(sys.argv)
 
 # Load VargoMono before any Tk window is created.
 # Returns "VargoMono" on success or "Consolas" as fallback.
@@ -249,14 +254,22 @@ def _run():
     # --- Audio ---
     audio = AudioManager(config)
 
-    # --- Tkinter root (hidden – ControlPanel and Overlay are Toplevels) ---
+    # --- Tkinter root (hidden – ControlPanel is a Toplevel) ---
     root = tk.Tk()
     root.withdraw()
     root.title("SC Signature Reader")
 
-    # --- Overlay window ---
+    # Pump the Qt event loop from the tkinter mainloop so Qt signals
+    # (used by OverlayWindow) are processed at ~60 fps while tkinter
+    # components are still in place.  Removed when all windows are Qt.
+    def _pump_qt():
+        _qt_app.processEvents()
+        root.after(16, _pump_qt)
+    root.after(16, _pump_qt)
+
+    # --- Overlay window (PySide6) ---
     from overlay_window import OverlayWindow
-    overlay = OverlayWindow(root, config, state)
+    overlay = OverlayWindow(config, state)
 
     # --- Control panel ---
     panel = ControlPanel(root, config, state, overlay, BASE_DIR,

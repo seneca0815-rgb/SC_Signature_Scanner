@@ -248,39 +248,37 @@ class TestAppState(unittest.TestCase):
 # ===========================================================================
 
 class TestOverlayWindow(unittest.TestCase):
-    """Transparent overlay: visibility, label content, state-driven sync."""
+    """Transparent overlay: visibility, label content, state-driven sync -- PySide6."""
 
     @classmethod
     def setUpClass(cls):
-        try:
-            cls.root = tk.Tk()
-            cls.root.withdraw()
-        except tk.TclError as exc:
-            raise unittest.SkipTest(f"Tk not available: {exc}")
+        from PySide6.QtWidgets import QApplication
+        cls._qt_app = QApplication.instance() or QApplication(sys.argv)
 
     @classmethod
     def tearDownClass(cls):
-        try:
-            cls.root.destroy()
-        except Exception:
-            pass
+        pass  # QApplication is process-wide; don't destroy it here
 
     def setUp(self):
+        from PySide6.QtWidgets import QApplication
         self.config  = _make_config()
         self.state   = AppState(self.config)
-        self.overlay = OverlayWindow(self.root, self.config, self.state)
-        _pump(self.root)
+        self.overlay = OverlayWindow(self.config, self.state)
+        QApplication.processEvents()
 
     def tearDown(self):
-        try:
-            self.overlay._win.destroy()
-        except Exception:
-            pass
+        from PySide6.QtWidgets import QApplication
+        self.overlay.deleteLater()
+        QApplication.processEvents()
+
+    def _pump(self):
+        from PySide6.QtWidgets import QApplication
+        QApplication.processEvents()
 
     # --- initial state ---
 
     def test_overlay_hidden_on_init(self):
-        self.assertFalse(_is_mapped(self.overlay._win))
+        self.assertFalse(self.overlay.isVisible())
 
     def test_label_empty_on_init(self):
         self.assertEqual(self.overlay._current_text, "")
@@ -289,198 +287,189 @@ class TestOverlayWindow(unittest.TestCase):
 
     def test_show_makes_overlay_visible(self):
         self.overlay.show("Test signal")
-        _pump(self.root)
-        self.assertTrue(_is_mapped(self.overlay._win))
+        self._pump()
+        self.assertTrue(self.overlay.isVisible())
 
     def test_show_sets_label_text(self):
         self.overlay.show("Hello")
-        _pump(self.root)
-        combined = (self.overlay._lbl_pre.cget("text")
-                    + self.overlay._lbl_rarity.cget("text")
-                    + self.overlay._lbl_post.cget("text"))
+        self._pump()
+        combined = (self.overlay._lbl_pre.text()
+                    + self.overlay._lbl_rarity.text()
+                    + self.overlay._lbl_post.text())
         self.assertEqual(combined, "Hello")
 
     def test_hide_after_show_makes_invisible(self):
         self.overlay.show("Test")
-        _pump(self.root)
+        self._pump()
         self.overlay.hide()
-        _pump(self.root)
-        self.assertFalse(_is_mapped(self.overlay._win))
+        self._pump()
+        self.assertFalse(self.overlay.isVisible())
 
     def test_hide_clears_current_text(self):
         self.overlay.show("Test")
-        _pump(self.root)
+        self._pump()
         self.overlay.hide()
-        _pump(self.root)
+        self._pump()
         self.assertEqual(self.overlay._current_text, "")
 
     def test_show_same_text_no_redundant_update(self):
         self.overlay.show("Same")
-        _pump(self.root)
+        self._pump()
         original = self.overlay._current_text
         self.overlay.show("Same")
-        _pump(self.root)
+        self._pump()
         self.assertEqual(self.overlay._current_text, original)
 
-    def test_show_empty_string_withdraws_window(self):
+    def test_show_empty_string_hides_window(self):
         self.overlay.show("Something")
-        _pump(self.root)
+        self._pump()
         self.overlay.show("")
-        _pump(self.root)
-        self.assertFalse(_is_mapped(self.overlay._win))
+        self._pump()
+        self.assertFalse(self.overlay.isVisible())
 
     # --- state-driven sync ---
 
     def test_state_signal_shows_overlay(self):
         self.state.set_signal("Quantainium")
-        _pump(self.root)
-        self.assertTrue(_is_mapped(self.overlay._win))
+        self._pump()
+        self.assertTrue(self.overlay.isVisible())
 
     def test_state_signal_text_appears_in_label(self):
         self.state.set_signal("Quantainium")
-        _pump(self.root)
-        combined = (self.overlay._lbl_pre.cget("text")
-                    + self.overlay._lbl_rarity.cget("text")
-                    + self.overlay._lbl_post.cget("text"))
+        self._pump()
+        combined = (self.overlay._lbl_pre.text()
+                    + self.overlay._lbl_rarity.text()
+                    + self.overlay._lbl_post.text())
         self.assertIn("Quantainium", combined)
 
     def test_state_empty_signal_hides_overlay(self):
         self.state.set_signal("Something")
-        _pump(self.root)
+        self._pump()
         self.state.set_signal("")
-        _pump(self.root)
-        self.assertFalse(_is_mapped(self.overlay._win))
+        self._pump()
+        self.assertFalse(self.overlay.isVisible())
 
     def test_state_pause_hides_overlay(self):
         self.state.set_signal("Active signal")
-        _pump(self.root)
+        self._pump()
         self.state.toggle_pause()
-        _pump(self.root)
-        self.assertFalse(_is_mapped(self.overlay._win))
+        self._pump()
+        self.assertFalse(self.overlay.isVisible())
 
     def test_state_resume_reshows_overlay(self):
         self.state.set_signal("Active signal")
-        _pump(self.root)
+        self._pump()
         self.state.toggle_pause()
-        _pump(self.root)
-        self.state.toggle_pause()   # resume
-        _pump(self.root)
-        self.assertTrue(_is_mapped(self.overlay._win))
+        self._pump()
+        self.state.toggle_pause()
+        self._pump()
+        self.assertTrue(self.overlay.isVisible())
 
     # --- rarity colour split ---
 
     def test_rarity_label_gets_rarity_colour(self):
-        """Only _lbl_rarity should carry the rarity colour; _lbl_pre stays in theme fg."""
+        """_lbl_rarity stylesheet must contain the rarity colour."""
         from overlay_window import RARITY_COLOURS
         self.overlay.show("ℹ  Quantainium (1x)  ·  Legendary")
-        _pump(self.root)
-        self.assertEqual(
-            self.overlay._lbl_rarity.cget("fg").lower(),
-            RARITY_COLOURS["Legendary"].lower())
-        self.assertEqual(
-            self.overlay._lbl_pre.cget("fg").lower(),
-            self.overlay._fg_color.lower())
+        self._pump()
+        self.assertIn(
+            RARITY_COLOURS["Legendary"].lower(),
+            self.overlay._lbl_rarity.styleSheet().lower())
 
     def test_pre_label_contains_mineral_name(self):
         self.overlay.show("ℹ  Taranite (1x)  ·  Rare")
-        _pump(self.root)
-        self.assertIn("Taranite", self.overlay._lbl_pre.cget("text"))
+        self._pump()
+        self.assertIn("Taranite", self.overlay._lbl_pre.text())
 
     def test_no_rarity_keyword_keeps_theme_colour(self):
-        """Text without a rarity word must not change any label colour."""
+        """Text without rarity keyword: _lbl_rarity gets the default fg colour."""
         self.overlay.show("ℹ  Unknown signal")
-        _pump(self.root)
-        self.assertEqual(
-            self.overlay._lbl_rarity.cget("fg").lower(),
-            self.overlay._fg_color.lower())
+        self._pump()
+        self.assertIn(
+            self.overlay._fg_color.lower(),
+            self.overlay._lbl_rarity.styleSheet().lower())
 
     # --- theme ---
 
-    def test_apply_theme_changes_label_bg(self):
+    def test_apply_theme_updates_fg_color(self):
         self.overlay.apply_theme({
             "bg_color": "#ff0000", "fg_color": "#00ff00",
-            "font_size": 13, "font_family": "Consolas"})
-        _pump(self.root)
-        self.assertEqual(self.overlay._lbl_pre.cget("bg").lower(), "#ff0000")
+            "font_size": 13, "font_family": "VargoMono"})
+        self._pump()
+        self.assertEqual(self.overlay._fg_color.lower(), "#00ff00")
 
-    def test_apply_theme_changes_label_fg(self):
+    def test_apply_theme_updates_pill_background(self):
         self.overlay.apply_theme({
             "bg_color": "#ff0000", "fg_color": "#00ff00",
-            "font_size": 13, "font_family": "Consolas"})
-        _pump(self.root)
-        self.assertEqual(self.overlay._lbl_pre.cget("fg").lower(), "#00ff00")
+            "font_size": 13, "font_family": "VargoMono"})
+        self._pump()
+        self.assertIn("#ff0000", self.overlay._pill.styleSheet())
 
     def test_apply_theme_with_current_text_rerenders(self):
-        """_do_apply_theme must rerender when text is already displayed."""
+        """_do_apply_theme must preserve visible text after a theme change."""
         self.overlay.show("ℹ  Quantainium (1x)  ·  Legendary")
-        _pump(self.root)
+        self._pump()
         self.overlay.apply_theme({
             "bg_color": "#222222", "fg_color": "#aabbcc",
-            "font_size": 14, "font_family": "Consolas"})
-        _pump(self.root)
-        # Overlay remains visible and rarity label keeps its colour
-        self.assertTrue(_is_mapped(self.overlay._win))
-        combined = (self.overlay._lbl_pre.cget("text")
-                    + self.overlay._lbl_rarity.cget("text")
-                    + self.overlay._lbl_post.cget("text"))
+            "font_size": 14, "font_family": "VargoMono"})
+        self._pump()
+        self.assertTrue(self.overlay.isVisible())
+        combined = (self.overlay._lbl_pre.text()
+                    + self.overlay._lbl_rarity.text()
+                    + self.overlay._lbl_post.text())
         self.assertIn("Legendary", combined)
 
     def test_set_position_custom(self):
         """set_position with custom preset stores coordinates."""
         self.overlay.set_position("custom", custom_x=100, custom_y=200)
-        _pump(self.root)
+        self._pump()
         self.assertEqual(self.overlay._custom_x, 100)
         self.assertEqual(self.overlay._custom_y, 200)
 
     def test_set_position_preset(self):
-        """set_position with a named preset must store the preset name."""
+        """set_position with a named preset stores the preset name."""
         self.overlay.set_position("top_left")
-        _pump(self.root)
+        self._pump()
         self.assertEqual(self.overlay._position, "top_left")
 
     def test_compute_position_preset_returns_ints(self):
         """_compute_position with a valid preset must return two integers."""
         from overlay_window import _compute_position
-        x, y = _compute_position("top_left", self.overlay._win,
-                                 self.root, 0, 0)
+        x, y = _compute_position("top_left", self.overlay, 0, 0)
         self.assertIsInstance(x, int)
         self.assertIsInstance(y, int)
 
     def test_compute_position_center(self):
         from overlay_window import _compute_position
-        x, y = _compute_position("center", self.overlay._win,
-                                 self.root, 0, 0)
-        sw = self.root.winfo_screenwidth()
-        sh = self.root.winfo_screenheight()
+        from PySide6.QtGui import QGuiApplication
+        x, y = _compute_position("center", self.overlay, 0, 0)
+        screen = QGuiApplication.primaryScreen().geometry()
         self.assertGreater(x, 0)
         self.assertGreater(y, 0)
-        self.assertLess(x, sw)
-        self.assertLess(y, sh)
+        self.assertLess(x, screen.width())
+        self.assertLess(y, screen.height())
 
     def test_compute_position_top_right(self):
         from overlay_window import _compute_position
-        x, y = _compute_position("top_right", self.overlay._win,
-                                 self.root, 0, 0)
+        x, y = _compute_position("top_right", self.overlay, 0, 0)
         self.assertGreater(x, 0)
         self.assertGreaterEqual(y, 20)
 
     def test_compute_position_upper_center(self):
         from overlay_window import _compute_position
-        x, y = _compute_position("upper_center", self.overlay._win,
-                                 self.root, 0, 0)
+        x, y = _compute_position("upper_center", self.overlay, 0, 0)
         self.assertGreaterEqual(y, 20)
 
     def test_compute_position_bottom_left(self):
         from overlay_window import _compute_position
-        x, y = _compute_position("bottom_left", self.overlay._win,
-                                 self.root, 0, 0)
-        sh = self.root.winfo_screenheight()
+        from PySide6.QtGui import QGuiApplication
+        x, y = _compute_position("bottom_left", self.overlay, 0, 0)
+        sh = QGuiApplication.primaryScreen().geometry().height()
         self.assertGreater(y, sh // 2)
 
     def test_compute_position_unknown_uses_custom(self):
         from overlay_window import _compute_position
-        x, y = _compute_position("unknown_preset", self.overlay._win,
-                                 self.root, 77, 88)
+        x, y = _compute_position("unknown_preset", self.overlay, 77, 88)
         self.assertEqual((x, y), (77, 88))
 
 
