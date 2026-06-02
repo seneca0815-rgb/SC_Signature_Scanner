@@ -385,6 +385,7 @@ class ControlPanel:
         enabled = not self._config.get("audio_enabled", True)
         self._config["audio_enabled"] = enabled
         self._refresh_audio_toggle_btn()
+        self._state.save_config()
         if enabled and self._audio:
             self._audio.play_activate()
 
@@ -399,11 +400,17 @@ class ControlPanel:
 
     def _on_volume_change(self, value):
         vol = int(float(value)) / 100.0
+        self._config["audio_volume"] = vol
         if self._audio:
             self._audio.set_volume(vol)
+        # Debounce: save 800 ms after last slider move
+        if hasattr(self, "_vol_save_after"):
+            self._root.after_cancel(self._vol_save_after)
+        self._vol_save_after = self._root.after(800, self._state.save_config)
 
     def _on_signal_sound_toggle(self):
         self._config["audio_sound_signal"] = bool(self._signal_sound_var.get())
+        self._state.save_config()
 
     def _refresh_perf(self):
         """Update performance labels every 5 s (DEBUG mode only)."""
@@ -460,6 +467,7 @@ class ControlPanel:
         preset = self._position_var.get()
         self._config["overlay_position"] = preset
         self._overlay.set_position(preset)
+        self._state.save_config()
         log.info("Overlay position changed to: %s", preset)
 
     def _on_close(self):

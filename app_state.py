@@ -131,13 +131,17 @@ class AppState:
     def set_config_path(self, path: Path):
         self._config_path = path
 
-    def _save_config(self):
+    def save_config(self):
         if self._config_path and self._config_path.exists():
             try:
                 with open(self._config_path, "w", encoding="utf-8") as f:
                     json.dump(self._config, f, indent=2, ensure_ascii=False)
+                log.debug("Config saved to %s", self._config_path)
             except Exception as e:
                 log.warning("Config save failed: %s", e)
+
+    def _save_config(self):
+        self.save_config()
 
     # ------------------------------------------------------------------
     # Change notification
