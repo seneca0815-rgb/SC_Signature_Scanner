@@ -478,100 +478,91 @@ class TestOverlayWindow(unittest.TestCase):
 # ===========================================================================
 
 class TestControlPanel(unittest.TestCase):
-    """Control window: toggle, signals, recent list, theme preview, buttons."""
+    """Control window: toggle, signals, recent list, theme preview, buttons -- PySide6."""
 
     @classmethod
     def setUpClass(cls):
-        try:
-            cls.root = tk.Tk()
-            cls.root.withdraw()
-        except tk.TclError as exc:
-            raise unittest.SkipTest(f"Tk not available: {exc}")
+        from PySide6.QtWidgets import QApplication
+        cls._qt_app = QApplication.instance() or QApplication(sys.argv)
 
     @classmethod
     def tearDownClass(cls):
-        try:
-            cls.root.destroy()
-        except Exception:
-            pass
+        pass
 
     def setUp(self):
+        from PySide6.QtWidgets import QApplication
         self.config = _make_config()
         self.state  = AppState(self.config)
-        # OverlayWindow stub — only apply_theme is called by ControlPanel
         self.fake_overlay = type("FakeOverlay", (), {
-            "apply_theme": lambda self, t: None})()
+            "apply_theme":  lambda self, t: None,
+            "set_position": lambda self, p: None,
+        })()
         self.panel = ControlPanel(
-            self.root, self.config, self.state,
-            self.fake_overlay, PROJECT_ROOT)
-        _pump(self.root)
+            self.config, self.state, self.fake_overlay, PROJECT_ROOT)
+        QApplication.processEvents()
 
     def tearDown(self):
-        # Flush any pending after() callbacks before destroying widgets
-        # so we don't get TclError from callbacks firing on dead widgets.
-        try:
-            _pump(self.root)
-        except Exception:
-            pass
-        try:
-            self.panel._win.destroy()
-        except Exception:
-            pass
+        from PySide6.QtWidgets import QApplication
+        self.panel.deleteLater()
+        QApplication.processEvents()
+
+    def _pump(self):
+        from PySide6.QtWidgets import QApplication
+        QApplication.processEvents()
 
     # --- initial state ---
 
     def test_panel_visible_on_init(self):
-        self.assertTrue(_is_mapped(self.panel._win))
+        self.assertTrue(self.panel.isVisible())
 
     def test_initial_status_label_active(self):
-        self.assertEqual(self.panel._status_lbl.cget("text"), "ACTIVE")
+        self.assertEqual(self.panel._status_lbl.text(), "ACTIVE")
 
     def test_initial_toggle_button_text_is_pause(self):
-        self.assertEqual(self.panel._toggle_btn.cget("text"), "PAUSE")
+        self.assertEqual(self.panel._toggle_btn.text(), "PAUSE")
 
     def test_initial_signal_label_shows_no_signal(self):
-        text = self.panel._signal_lbl.cget("text")
-        self.assertIn("no signal", text)
+        self.assertIn("no signal", self.panel._signal_lbl.text())
 
     def test_window_title_contains_vargo(self):
-        self.assertIn("Vargo", self.panel._win.title())
+        self.assertIn("Vargo", self.panel.windowTitle())
 
     # --- scanner toggle ---
 
     def test_pause_updates_status_label(self):
-        self.panel._toggle_btn.invoke()
-        _pump(self.root)
-        self.assertEqual(self.panel._status_lbl.cget("text"), "PAUSED")
+        self.panel._toggle_btn.click()
+        self._pump()
+        self.assertEqual(self.panel._status_lbl.text(), "PAUSED")
 
     def test_pause_updates_toggle_button_to_resume(self):
-        self.panel._toggle_btn.invoke()
-        _pump(self.root)
-        self.assertEqual(self.panel._toggle_btn.cget("text"), "RESUME")
+        self.panel._toggle_btn.click()
+        self._pump()
+        self.assertEqual(self.panel._toggle_btn.text(), "RESUME")
 
     def test_resume_after_pause_restores_active(self):
-        self.panel._toggle_btn.invoke()
-        _pump(self.root)
-        self.panel._toggle_btn.invoke()
-        _pump(self.root)
-        self.assertEqual(self.panel._status_lbl.cget("text"), "ACTIVE")
+        self.panel._toggle_btn.click()
+        self._pump()
+        self.panel._toggle_btn.click()
+        self._pump()
+        self.assertEqual(self.panel._status_lbl.text(), "ACTIVE")
 
     def test_toggle_button_updates_app_state(self):
-        self.panel._toggle_btn.invoke()
+        self.panel._toggle_btn.click()
         self.assertTrue(self.state.paused)
 
     # --- signal display ---
 
     def test_signal_text_appears_in_panel(self):
         self.state.set_signal("Quantainium (3x)")
-        _pump(self.root)
-        self.assertIn("Quantainium (3x)", self.panel._signal_lbl.cget("text"))
+        self._pump()
+        self.assertIn("Quantainium (3x)", self.panel._signal_lbl.text())
 
     def test_cleared_signal_shows_no_signal(self):
         self.state.set_signal("Something")
-        _pump(self.root)
+        self._pump()
         self.state.set_signal("")
-        _pump(self.root)
-        self.assertIn("no signal", self.panel._signal_lbl.cget("text"))
+        self._pump()
+        self.assertIn("no signal", self.panel._signal_lbl.text())
 
     # --- recent signals ---
 
@@ -581,9 +572,8 @@ class TestControlPanel(unittest.TestCase):
     def test_recent_signals_populate_labels(self):
         for sig in ["Alpha", "Beta", "Gamma"]:
             self.state.set_signal(sig)
-            _pump(self.root)
-        combined = " ".join(
-            lbl.cget("text") for lbl in self.panel._recent_labels)
+            self._pump()
+        combined = " ".join(lbl.text() for lbl in self.panel._recent_labels)
         self.assertIn("Alpha", combined)
         self.assertIn("Beta", combined)
         self.assertIn("Gamma", combined)
@@ -591,32 +581,28 @@ class TestControlPanel(unittest.TestCase):
     def test_recent_signals_do_not_overflow_5_slots(self):
         for i in range(8):
             self.state.set_signal(f"Sig {i}")
-            _pump(self.root)
-        non_empty = sum(
-            1 for lbl in self.panel._recent_labels
-            if lbl.cget("text").strip())
+            self._pump()
+        non_empty = sum(1 for lbl in self.panel._recent_labels if lbl.text().strip())
         self.assertLessEqual(non_empty, 5)
 
     # --- theme preview ---
 
     def test_theme_preview_bg_matches_active_theme(self):
         theme = THEMES_DICT.get(self.state.active_theme, {})
-        expected = theme.get("bg_color", "")
-        actual = self.panel._theme_preview.cget("bg")
-        self.assertEqual(actual.lower(), expected.lower())
+        expected = theme.get("bg_color", "").lower()
+        self.assertIn(expected, self.panel._theme_preview.styleSheet().lower())
 
     def test_theme_preview_fg_matches_active_theme(self):
         theme = THEMES_DICT.get(self.state.active_theme, {})
-        expected = theme.get("fg_color", "")
-        actual = self.panel._theme_preview.cget("fg")
-        self.assertEqual(actual.lower(), expected.lower())
+        expected = theme.get("fg_color", "").lower()
+        self.assertIn(expected, self.panel._theme_preview.styleSheet().lower())
 
     # --- minimise / show ---
 
     def test_minimise_to_tray_withdraws_window(self):
         self.panel._on_close()
-        _pump(self.root)
-        self.assertFalse(_is_mapped(self.panel._win))
+        self._pump()
+        self.assertFalse(self.panel.isVisible())
 
     def test_minimise_sets_minimised_flag(self):
         self.panel._on_close()
@@ -631,56 +617,48 @@ class TestControlPanel(unittest.TestCase):
 
     def test_show_after_minimise_restores_window(self):
         self.panel._on_close()
-        _pump(self.root)
+        self._pump()
         self.panel.show()
-        _pump(self.root)
-        self.assertTrue(_is_mapped(self.panel._win))
+        self._pump()
+        self.assertTrue(self.panel.isVisible())
 
     # --- exit ---
 
     def test_exit_sets_running_false(self):
-        original_quit = self.root.quit
-        self.root.quit = lambda: None
-        try:
-            self.panel._on_exit()
-            self.assertFalse(self.state.running)
-        finally:
-            self.root.quit = original_quit
+        # Patch _root.quit so it doesn't actually quit the event loop
+        self.panel._root.quit = lambda: None
+        self.panel._on_exit()
+        self.assertFalse(self.state.running)
 
     # --- theme change ---
 
     def test_on_theme_change_updates_state(self):
-        self.panel._theme_var.set("dark-blue")
-        self.panel._on_theme_change()
-        _pump(self.root)
+        self.panel._on_theme_change("dark-blue")
+        self._pump()
         self.assertEqual(self.state.active_theme, "dark-blue")
 
     def test_on_theme_change_calls_apply_theme(self):
         mock_overlay = unittest.mock.MagicMock()
         self.panel._overlay = mock_overlay
-        self.panel._theme_var.set("dark-gold")
-        self.panel._on_theme_change()
-        _pump(self.root)
+        self.panel._on_theme_change("dark-gold")
+        self._pump()
         mock_overlay.apply_theme.assert_called()
 
     def test_on_theme_change_unknown_name_no_crash(self):
-        self.panel._theme_var.set("nonexistent-theme")
-        self.panel._on_theme_change()  # must not raise
+        self.panel._on_theme_change("nonexistent-theme")  # must not raise
 
     # --- position change ---
 
     def test_on_position_change_updates_config(self):
         mock_overlay = unittest.mock.MagicMock()
         self.panel._overlay = mock_overlay
-        self.panel._position_var.set("top_left")
-        self.panel._on_position_change()
+        self.panel._on_position_change("top_left")
         self.assertEqual(self.config.get("overlay_position"), "top_left")
 
     def test_on_position_change_calls_overlay_set_position(self):
         mock_overlay = unittest.mock.MagicMock()
         self.panel._overlay = mock_overlay
-        self.panel._position_var.set("center")
-        self.panel._on_position_change()
+        self.panel._on_position_change("center")
         mock_overlay.set_position.assert_called_with("center")
 
     # --- open log ---
@@ -718,46 +696,39 @@ class TestControlPanel(unittest.TestCase):
         """_refresh_audio_toggle_btn must return silently when btn not built."""
         panel_bare = ControlPanel.__new__(ControlPanel)
         panel_bare._config = {}
-        panel_bare._refresh_audio_toggle_btn()  # line 393 early return
+        panel_bare._refresh_audio_toggle_btn()  # early return guard
 
     # --- performance / debug mode ---
 
     def test_debug_mode_builds_perf_section(self):
-        """When log_level=DEBUG the perf section is rendered (lines 331-354)."""
+        """When log_level=DEBUG the perf section is built."""
+        from PySide6.QtWidgets import QApplication
         debug_config = dict(self.config)
         debug_config["log_level"] = "DEBUG"
         debug_state  = AppState(debug_config)
+        panel = ControlPanel(debug_config, debug_state, self.fake_overlay, PROJECT_ROOT)
+        QApplication.processEvents()
         try:
-            panel = ControlPanel(
-                self.root, debug_config, debug_state,
-                self.fake_overlay, PROJECT_ROOT)
-            _pump(self.root)
             self.assertTrue(panel._show_perf)
         finally:
-            try:
-                panel._win.destroy()
-            except Exception:
-                pass
+            panel.deleteLater()
+            QApplication.processEvents()
 
     def test_refresh_perf_updates_labels(self):
-        """_refresh_perf() must update perf labels without raising (lines 410-422)."""
+        """_refresh_perf() must update perf labels."""
+        from PySide6.QtWidgets import QApplication
         debug_config = dict(self.config)
         debug_config["log_level"] = "DEBUG"
         debug_state  = AppState(debug_config)
+        panel = ControlPanel(debug_config, debug_state, self.fake_overlay, PROJECT_ROOT)
+        QApplication.processEvents()
         try:
-            panel = ControlPanel(
-                self.root, debug_config, debug_state,
-                self.fake_overlay, PROJECT_ROOT)
-            _pump(self.root)
             debug_state.record_cycle_time(250.0)
             panel._refresh_perf()
-            _pump(self.root)
-            self.assertIn("250", panel._perf_last_lbl.cget("text"))
+            self.assertIn("250", panel._perf_last_lbl.text())
         finally:
-            try:
-                panel._win.destroy()
-            except Exception:
-                pass
+            panel.deleteLater()
+            QApplication.processEvents()
 
     def test_refresh_perf_noop_when_disabled(self):
         """When _show_perf is False, _refresh_perf must return immediately."""
@@ -1008,24 +979,19 @@ class TestSetupWizardUI(unittest.TestCase):
 # ===========================================================================
 
 class TestControlPanelROI(unittest.TestCase):
-    """_on_select_roi() and select_roi(): config update, state management."""
+    """_on_select_roi() and select_roi(): config update, state management -- PySide6."""
 
     @classmethod
     def setUpClass(cls):
-        try:
-            cls.root = tk.Tk()
-            cls.root.withdraw()
-        except tk.TclError as exc:
-            raise unittest.SkipTest(f"Tk not available: {exc}")
+        from PySide6.QtWidgets import QApplication
+        cls._qt_app = QApplication.instance() or QApplication(sys.argv)
 
     @classmethod
     def tearDownClass(cls):
-        try:
-            cls.root.destroy()
-        except Exception:
-            pass
+        pass
 
     def setUp(self):
+        from PySide6.QtWidgets import QApplication
         self.config = _make_config()
         self.state  = AppState(self.config)
         self.fake_overlay = type("FakeOverlay", (), {
@@ -1033,19 +999,13 @@ class TestControlPanelROI(unittest.TestCase):
             "set_position": lambda self, p: None,
         })()
         self.panel = ControlPanel(
-            self.root, self.config, self.state,
-            self.fake_overlay, PROJECT_ROOT)
-        _pump(self.root)
+            self.config, self.state, self.fake_overlay, PROJECT_ROOT)
+        QApplication.processEvents()
 
     def tearDown(self):
-        try:
-            _pump(self.root)
-        except Exception:
-            pass
-        try:
-            self.panel._win.destroy()
-        except Exception:
-            pass
+        from PySide6.QtWidgets import QApplication
+        self.panel.deleteLater()
+        QApplication.processEvents()
 
     _REGION = {"top": 100, "left": 200, "width": 800, "height": 400}
 
@@ -1111,7 +1071,7 @@ class TestControlPanelROI(unittest.TestCase):
         self.assertTrue(paused_states[0])
 
     def test_scanner_resumes_after_selection_if_was_active(self):
-        self.assertFalse(self.state.paused)  # pre-condition
+        self.assertFalse(self.state.paused)
         self._call_roi(None)
         self.assertFalse(self.state.paused)
 
@@ -1134,141 +1094,136 @@ class TestControlPanelROI(unittest.TestCase):
 # ===========================================================================
 
 class TestControlPanelAudio(unittest.TestCase):
-    """Audio controls in the control panel: master toggle, volume, signal sound,
-    and scanner toggle → audio callback wiring."""
+    """Audio controls: master toggle, volume, signal sound, scanner audio wiring -- PySide6."""
 
     @classmethod
     def setUpClass(cls):
-        try:
-            cls.root = tk.Tk()
-            cls.root.withdraw()
-        except tk.TclError as exc:
-            raise unittest.SkipTest(f"Tk not available: {exc}")
+        from PySide6.QtWidgets import QApplication
+        cls._qt_app = QApplication.instance() or QApplication(sys.argv)
 
     @classmethod
     def tearDownClass(cls):
-        try:
-            cls.root.destroy()
-        except Exception:
-            pass
+        pass
 
     def setUp(self):
+        from PySide6.QtWidgets import QApplication
         self.config = _make_config()
         self.state  = AppState(self.config)
         self.fake_overlay = type("FakeOverlay", (), {
-            "apply_theme": lambda self, t: None})()
+            "apply_theme":  lambda self, t: None,
+            "set_position": lambda self, p: None,
+        })()
         self.mock_audio = unittest.mock.MagicMock()
         self.panel = ControlPanel(
-            self.root, self.config, self.state,
-            self.fake_overlay, PROJECT_ROOT,
+            self.config, self.state, self.fake_overlay, PROJECT_ROOT,
             audio=self.mock_audio)
-        _pump(self.root)
+        QApplication.processEvents()
 
     def tearDown(self):
-        try:
-            _pump(self.root)
-        except Exception:
-            pass
-        try:
-            self.panel._win.destroy()
-        except Exception:
-            pass
+        from PySide6.QtWidgets import QApplication
+        self.panel.deleteLater()
+        QApplication.processEvents()
+
+    def _pump(self):
+        from PySide6.QtWidgets import QApplication
+        QApplication.processEvents()
 
     # --- master audio toggle ---
 
     def test_audio_toggle_btn_initial_text_is_on(self):
-        self.assertEqual(self.panel._audio_toggle_btn.cget("text"), "ON")
+        self.assertEqual(self.panel._audio_toggle_btn.text(), "ON")
 
     def test_audio_toggle_click_disables_audio(self):
-        self.panel._audio_toggle_btn.invoke()
+        self.panel._audio_toggle_btn.click()
         self.assertFalse(self.config["audio_enabled"])
 
     def test_audio_toggle_click_changes_text_to_off(self):
-        self.panel._audio_toggle_btn.invoke()
-        _pump(self.root)
-        self.assertEqual(self.panel._audio_toggle_btn.cget("text"), "OFF")
+        self.panel._audio_toggle_btn.click()
+        self._pump()
+        self.assertEqual(self.panel._audio_toggle_btn.text(), "OFF")
 
     def test_audio_toggle_click_twice_re_enables(self):
-        self.panel._audio_toggle_btn.invoke()
-        self.panel._audio_toggle_btn.invoke()
-        _pump(self.root)
+        self.panel._audio_toggle_btn.click()
+        self.panel._audio_toggle_btn.click()
+        self._pump()
         self.assertTrue(self.config["audio_enabled"])
-        self.assertEqual(self.panel._audio_toggle_btn.cget("text"), "ON")
+        self.assertEqual(self.panel._audio_toggle_btn.text(), "ON")
 
     def test_audio_toggle_enable_plays_activate_sound(self):
-        """Re-enabling audio must play the activate sound as feedback."""
-        self.panel._audio_toggle_btn.invoke()  # disable
+        self.panel._audio_toggle_btn.click()  # disable
         self.mock_audio.reset_mock()
-        self.panel._audio_toggle_btn.invoke()  # re-enable
+        self.panel._audio_toggle_btn.click()  # re-enable
         self.mock_audio.play_activate.assert_called_once()
 
     def test_audio_toggle_disable_does_not_play_sound(self):
-        self.panel._audio_toggle_btn.invoke()  # disable
+        self.panel._audio_toggle_btn.click()  # disable
         self.mock_audio.play_activate.assert_not_called()
 
     # --- volume slider ---
 
     def test_volume_slider_default_is_50(self):
-        self.assertEqual(self.panel._volume_var.get(), 50)
+        self.assertEqual(self.panel._vol_slider.value(), 50)
 
     def test_volume_change_calls_set_volume(self):
-        self.panel._on_volume_change("75")
+        self.panel._on_volume_change(75)
         self.mock_audio.set_volume.assert_called_once_with(0.75)
 
     def test_volume_change_zero_calls_set_volume_zero(self):
-        self.panel._on_volume_change("0")
+        self.panel._on_volume_change(0)
         self.mock_audio.set_volume.assert_called_once_with(0.0)
 
     def test_volume_change_full_calls_set_volume_one(self):
-        self.panel._on_volume_change("100")
+        self.panel._on_volume_change(100)
         self.mock_audio.set_volume.assert_called_once_with(1.0)
 
     # --- signal sound checkbox ---
 
     def test_signal_sound_checkbox_default_is_off(self):
-        self.assertFalse(self.panel._signal_sound_var.get())
+        self.assertFalse(self.panel._signal_sound_cb.isChecked())
 
     def test_signal_sound_toggle_updates_config(self):
-        self.panel._signal_sound_var.set(True)
+        self.panel._signal_sound_cb.setChecked(True)
         self.panel._on_signal_sound_toggle()
         self.assertTrue(self.config["audio_sound_signal"])
 
     def test_signal_sound_toggle_off_updates_config(self):
-        self.panel._signal_sound_var.set(True)
+        self.panel._signal_sound_cb.setChecked(True)
         self.panel._on_signal_sound_toggle()
-        self.panel._signal_sound_var.set(False)
+        self.panel._signal_sound_cb.setChecked(False)
         self.panel._on_signal_sound_toggle()
         self.assertFalse(self.config["audio_sound_signal"])
 
     # --- scanner toggle → audio callbacks ---
 
     def test_scanner_pause_calls_play_deactivate(self):
-        self.panel._toggle_btn.invoke()  # pause
-        _pump(self.root)
+        self.panel._toggle_btn.click()
+        self._pump()
         self.mock_audio.play_deactivate.assert_called_once()
         self.mock_audio.play_activate.assert_not_called()
 
     def test_scanner_resume_calls_play_activate(self):
-        self.panel._toggle_btn.invoke()  # pause
+        self.panel._toggle_btn.click()  # pause
         self.mock_audio.reset_mock()
-        self.panel._toggle_btn.invoke()  # resume
-        _pump(self.root)
+        self.panel._toggle_btn.click()  # resume
+        self._pump()
         self.mock_audio.play_activate.assert_called_once()
         self.mock_audio.play_deactivate.assert_not_called()
 
     def test_scanner_toggle_without_audio_no_crash(self):
-        """Panel created without audio manager must not raise on toggle."""
+        """Panel without audio manager must not raise on toggle."""
+        from PySide6.QtWidgets import QApplication
         panel_no_audio = ControlPanel(
-            self.root, _make_config(), AppState(_make_config()),
+            _make_config(), AppState(_make_config()),
             self.fake_overlay, PROJECT_ROOT)
-        _pump(self.root)
+        QApplication.processEvents()
         try:
-            panel_no_audio._toggle_btn.invoke()
-            _pump(self.root)
+            panel_no_audio._toggle_btn.click()
+            QApplication.processEvents()
         except Exception as e:
             self.fail(f"toggle raised unexpectedly without audio: {e}")
         finally:
-            panel_no_audio._win.destroy()
+            panel_no_audio.deleteLater()
+            QApplication.processEvents()
 
 
 # ===========================================================================

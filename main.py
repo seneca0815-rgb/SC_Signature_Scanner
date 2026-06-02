@@ -271,9 +271,9 @@ def _run():
     from overlay_window import OverlayWindow
     overlay = OverlayWindow(config, state)
 
-    # --- Control panel ---
-    panel = ControlPanel(root, config, state, overlay, BASE_DIR,
-                         audio=audio, log_dir=log_dir)
+    # --- Control panel (PySide6) ---
+    panel = ControlPanel(config, state, overlay, BASE_DIR,
+                         audio=audio, log_dir=log_dir, _tk_root=root)
 
     log.info("Theme: %s", config.get("theme"))
     log.info("Scan region: %s", config.get("scan_region") or config.get("roi"))
