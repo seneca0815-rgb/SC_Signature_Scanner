@@ -141,6 +141,7 @@ class TestSetupWizardSaveIntegration(unittest.TestCase):
 
         # Build a no-GUI wizard instance
         wiz = SetupWizard.__new__(SetupWizard)
+        wiz._monitor_choices = dict(RESOLUTIONS)
         wiz._res_var    = type("V", (), {"get": lambda s: resolution_label})()
         wiz._theme_var  = type("V", (), {"get": lambda s: theme_name})()
         wiz._hotkey_var = type("V", (), {"get": lambda s: "Scroll Lock"})()

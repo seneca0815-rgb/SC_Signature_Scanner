@@ -62,6 +62,7 @@ RESOLUTIONS = {
     "3840 × 1440":  {"top": 200, "left": 600, "width": 2640, "height": 800},
     "5120 × 1440":  {"top": 200, "left": 770, "width": 3570, "height": 800},
     "3840 × 2160":  {"top": 300, "left": 570, "width": 2700, "height": 1200},
+    "5120 × 2160":  {"top": 300, "left": 760, "width": 3600, "height": 1200},
     "Custom (edit config.json manually)": None,
 }
 
@@ -70,35 +71,78 @@ _BASELINE_W, _BASELINE_H = 2560, 1440
 _BASELINE = RESOLUTIONS["2560 × 1440"]
 
 
-def _auto_detect_resolution(root: tk.Tk) -> tuple[str, bool]:
-    """Detect the primary screen resolution and ensure it exists in RESOLUTIONS.
+def _build_monitor_choices() -> tuple[dict, str, bool]:
+    """Enumerate all connected monitors and build wizard-ready scan_region entries.
 
-    Returns (label, is_new) where is_new is True when the entry was not in the
-    hardcoded presets and was computed proportionally from the 2560×1440 baseline.
-    Falls back to '2560 × 1440' if the screen dimensions cannot be read (e.g.
-    in tests where root is a mock).
+    Returns (choices, default_label, default_is_new):
+      choices       – dict mapping display label → scan_region (absolute coords)
+                      or None for the "Custom" entry.
+      default_label – pre-selected label (largest monitor, most likely SC display).
+      default_is_new – True when the default monitor's resolution was not in the
+                       hardcoded RESOLUTIONS presets (scan_region was scaled).
+
+    Each scan_region uses absolute virtual-desktop pixel coordinates so mss
+    captures from the correct physical monitor regardless of arrangement.
+    Falls back to the static RESOLUTIONS dict when mss is unavailable.
     """
     try:
-        sw = int(root.winfo_screenwidth())
-        sh = int(root.winfo_screenheight())
-    except (TypeError, ValueError):
-        return "2560 × 1440", False
+        import mss as _mss
+        with _mss.mss() as sct:
+            monitors = sct.monitors[1:]   # index 0 is the combined virtual desktop
+            if not monitors:
+                raise RuntimeError("no monitors found")
 
-    label = f"{sw} × {sh}"
+            choices: dict = {}
+            default_label = None
+            default_is_new = False
+            largest_area = 0
 
-    if label in RESOLUTIONS:
-        return label, False
+            for i, mon in enumerate(monitors, 1):
+                w, h = mon["width"], mon["height"]
+                if w <= 0 or h <= 0:
+                    continue  # skip degenerate / virtual monitors
+                suffix = "  (primary)" if i == 1 else ""
+                label = f"Monitor {i}  —  {w} × {h}{suffix}"
 
-    # Proportionally scale scan_region from the 2560×1440 baseline
-    sx = sw / _BASELINE_W
-    sy = sh / _BASELINE_H
-    RESOLUTIONS[label] = {
-        "top":    max(100, round(_BASELINE["top"]    * sy)),
-        "left":   max(0,   round(_BASELINE["left"]   * sx)),
-        "width":  round(_BASELINE["width"]  * sx),
-        "height": round(_BASELINE["height"] * sy),
-    }
-    return label, True
+                # Look for a hardcoded preset for this resolution
+                res_key = f"{w} × {h}"
+                if res_key in RESOLUTIONS and RESOLUTIONS[res_key]:
+                    preset = RESOLUTIONS[res_key]
+                    is_new = False
+                else:
+                    sx = w / _BASELINE_W
+                    sy = h / _BASELINE_H
+                    preset = {
+                        "top":    max(100, round(_BASELINE["top"]    * sy)),
+                        "left":   max(0,   round(_BASELINE["left"]   * sx)),
+                        "width":  round(_BASELINE["width"]  * sx),
+                        "height": round(_BASELINE["height"] * sy),
+                    }
+                    is_new = True
+
+                # Add monitor offset → absolute virtual-desktop coordinates
+                choices[label] = {
+                    "top":    mon["top"]  + preset["top"],
+                    "left":   mon["left"] + preset["left"],
+                    "width":  preset["width"],
+                    "height": preset["height"],
+                }
+
+                if w * h > largest_area:
+                    largest_area = w * h
+                    default_label = label
+                    default_is_new = is_new
+
+            choices["Custom (edit config.json manually)"] = None
+
+            if default_label is None:
+                # No usable monitor found (all had zero dimensions)
+                raise RuntimeError("no usable monitors found")
+
+            return choices, default_label, default_is_new
+
+    except Exception:
+        return dict(RESOLUTIONS), "2560 × 1440", False
 
 # Hotkey options: display label → keyboard-library key name
 HOTKEYS = {
@@ -147,9 +191,9 @@ class SetupWizard:
         self._audio_manager = audio_manager
 
         self._step = 0
-        _detected_label, self._detected_is_new = _auto_detect_resolution(self.root)
-        self._detected_res = _detected_label
-        self._res_var     = tk.StringVar(value=_detected_label)
+        self._monitor_choices, _default, self._detected_is_new = _build_monitor_choices()
+        self._detected_res = _default
+        self._res_var     = tk.StringVar(value=_default)
         self._theme_var   = tk.StringVar(value="vargo")
         self._hotkey_var  = tk.StringVar(value="Scroll Lock")
         self._preview_tk  = None   # keep reference so GC doesn't collect it
@@ -268,19 +312,40 @@ class SetupWizard:
     def _page_resolution(self):
         f = self._frame
         tk.Label(f, text="Screen resolution", bg=C_BG, fg=C_TEXT,
-                 font=("Consolas", 15, "bold")).pack(anchor="w", pady=(24, 4))
+                 font=("Consolas", 15, "bold")).pack(anchor="w", pady=(16, 4))
         tk.Label(f,
                  text="Select the resolution you play Star Citizen at.",
                  bg=C_BG, fg=C_MUTED,
-                 font=("Consolas", 11)).pack(anchor="w", pady=(0, 12))
+                 font=("Consolas", 11)).pack(anchor="w", pady=(0, 8))
 
-        for label in RESOLUTIONS:
-            row = tk.Frame(f, bg=C_BG)
-            row.pack(fill="x", pady=2)
+        # Scrollable list so the nav buttons stay visible regardless of
+        # how many presets are in RESOLUTIONS.
+        list_frame = tk.Frame(f, bg=C_BG)
+        list_frame.pack(fill="both", expand=True)
+
+        canvas = tk.Canvas(list_frame, bg=C_BG, highlightthickness=0,
+                           height=220)
+        scrollbar = tk.Scrollbar(list_frame, orient="vertical",
+                                 command=canvas.yview)
+        inner = tk.Frame(canvas, bg=C_BG)
+
+        inner.bind("<Configure>",
+                   lambda e: canvas.configure(
+                       scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=inner, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        # Only show scrollbar when content overflows
+        canvas.update_idletasks()
+        if inner.winfo_reqheight() > 220:
+            scrollbar.pack(side="right", fill="y")
+
+        for label in self._monitor_choices:
             is_detected = (label == self._detected_res)
             display_text = f"{label}  ← detected" if is_detected else label
             tk.Radiobutton(
-                row,
+                inner,
                 text=display_text,
                 variable=self._res_var,
                 value=label,
@@ -290,20 +355,32 @@ class SetupWizard:
                 activebackground=C_BG,
                 activeforeground=C_ACCENT,
                 font=("Consolas", 12, "bold") if is_detected else ("Consolas", 12),
-            ).pack(anchor="w")
+            ).pack(anchor="w", pady=2)
+
+        # Scroll to detected entry so it's immediately visible
+        def _scroll_to_detected():
+            canvas.update_idletasks()
+            total_h = inner.winfo_reqheight()
+            if total_h <= 0:
+                return
+            labels = list(self._monitor_choices.keys())
+            idx = labels.index(self._detected_res) if self._detected_res in labels else 0
+            frac = idx / max(len(labels) - 1, 1)
+            canvas.yview_moveto(max(0.0, frac - 0.2))
+        f.after(50, _scroll_to_detected)
 
         hint_lines = ["The scan region can be fine-tuned in config.json later."]
         if self._detected_is_new:
             hint_lines.insert(
                 0,
-                f"Note: {self._detected_res} was auto-computed from the 2560×1440\n"
-                "baseline. Run scripts/find_roi.py to verify the scan region.",
+                f"Note: {self._detected_res} was auto-computed from the\n"
+                "2560×1440 baseline. Verify with scripts/find_roi.py.",
             )
         tk.Label(f,
                  text="\n".join(hint_lines),
                  bg=C_BG, fg=C_MUTED,
                  font=("Consolas", 10), justify="left").pack(
-                     anchor="w", pady=(16, 0))
+                     anchor="w", pady=(8, 0))
 
     def _page_theme(self):
         f = self._frame
@@ -577,7 +654,7 @@ class SetupWizard:
 
         # Resolution
         res_label = self._res_var.get()
-        region    = RESOLUTIONS.get(res_label)
+        region    = self._monitor_choices.get(res_label)
         if region:
             cfg["scan_region"] = region
         # Theme
