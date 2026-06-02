@@ -31,7 +31,7 @@ def get_base_dir() -> Path:
 
 def get_config_path() -> Path:
     """Return the user-writable config.json path (mirrors main.py logic)."""
-    if getattr(sys, "frozen", False) and platform.system() == "Windows":
+    if getattr(sys, "frozen", False) and platform.system() == "Windows":  # pragma: no cover
         appdata = os.environ.get("APPDATA", str(Path.home()))
         cfg_dir = Path(appdata) / "VargoDynamics" / "SCSigReader"
         cfg_dir.mkdir(parents=True, exist_ok=True)

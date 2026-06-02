@@ -49,7 +49,7 @@ def get_config_path() -> Path:
     requiring administrator privileges.  On first launch after installation
     the file is migrated from the install directory automatically.
     """
-    if getattr(sys, "frozen", False) and platform.system() == "Windows":
+    if getattr(sys, "frozen", False) and platform.system() == "Windows":  # pragma: no cover
         appdata = os.environ.get("APPDATA", str(Path.home()))
         cfg_dir = Path(appdata) / "VargoDynamics" / "SCSigReader"
         cfg_dir.mkdir(parents=True, exist_ok=True)
