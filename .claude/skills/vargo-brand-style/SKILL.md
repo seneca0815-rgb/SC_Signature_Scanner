@@ -45,10 +45,14 @@ Source: `overlay_window.py`
 
 ## Typography
 
-- **Font family:** Consolas (Windows system font), fallback chain: `Courier New` → `DejaVu Sans Mono`
+- **Primary font:** VargoMono — custom derivative of Share Tech Mono (SIL OFL 1.1)
+  - File: `fonts/VargoMono/VargoMono-Regular.ttf`
+  - Modifications: slashed zero, crossbar seven, seriffed one, square middle dot
+  - Rebuild: `fontforge -script scripts/ff_edit_glyphs.py` → `python scripts/build_vargo_font_ft.py`
+- **Fallback chain:** `"VargoMono", "Consolas", "Courier New", monospace`
 - **Monospace only** — no proportional fonts anywhere in the brand
 - **Sizes in use:** 18 px (company name), 13 px (overlay body), 11 px (labels), 9–10 px (info lines), 8 px (sub-labels), 6 px (tagline fine print)
-- **QSS / PySide6:** use `font-family: "Consolas", "Courier New", monospace`
+- **QSS / PySide6:** `font-family: "VargoMono", "Consolas", "Courier New", monospace`
 
 ---
 

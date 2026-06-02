@@ -19,7 +19,7 @@ SCRIPT_DIR   = Path(__file__).parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 FONTS_DIR    = PROJECT_ROOT / "fonts" / "VargoMono"
 
-SOURCE_TTF = FONTS_DIR / "ShareTechMono-Regular.ttf"
+SOURCE_TTF = FONTS_DIR / "ShareTechMono-Regular-edited.ttf"
 OUTPUT_TTF = FONTS_DIR / "VargoMono-Regular.ttf"
 
 # ---------------------------------------------------------------------------
