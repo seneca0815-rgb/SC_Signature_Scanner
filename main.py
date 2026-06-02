@@ -8,6 +8,9 @@ Usage:
     python main.py --setup   # run setup wizard first
 """
 
+import os
+import platform
+import shutil
 import sys
 import threading
 import time
@@ -22,7 +25,7 @@ from control_panel import ControlPanel
 from logger_setup import get_logger, setup_logger
 from tray_icon import TrayIcon
 
-VERSION = "1.4.3"
+VERSION = "1.4.4"
 
 # Module-level logger – handlers are added by setup_logger() in main()
 log = get_logger()
@@ -38,8 +41,29 @@ def get_base_dir() -> Path:
     return Path(__file__).parent
 
 
+def get_config_path() -> Path:
+    """Return the user-writable config.json path.
+
+    When frozen (installed under Program Files), config.json is stored in
+    %APPDATA%\\VargoDynamics\\SCSigReader\\ so the app can write it without
+    requiring administrator privileges.  On first launch after installation
+    the file is migrated from the install directory automatically.
+    """
+    if getattr(sys, "frozen", False) and platform.system() == "Windows":
+        appdata = os.environ.get("APPDATA", str(Path.home()))
+        cfg_dir = Path(appdata) / "VargoDynamics" / "SCSigReader"
+        cfg_dir.mkdir(parents=True, exist_ok=True)
+        cfg_path = cfg_dir / "config.json"
+        # Migrate from install dir on first launch after (re)install
+        install_cfg = get_base_dir() / "config.json"
+        if not cfg_path.exists() and install_cfg.exists():
+            shutil.copy2(install_cfg, cfg_path)
+        return cfg_path
+    return get_base_dir() / "config.json"
+
+
 BASE_DIR    = get_base_dir()
-CONFIG_PATH = BASE_DIR / "config.json"
+CONFIG_PATH = get_config_path()
 LOOKUP_PATH = BASE_DIR / "lookup.json"
 
 

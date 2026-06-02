@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.4.4] – 2026-06-02
+
+### Fixed
+- **Settings save broken in installed version** — `config.json` was stored in
+  `C:\Program Files\SCSigReader\` where the app has no write access without
+  administrator privileges. All saves (position, audio, theme) silently failed
+  with a `PermissionError`. Config is now stored in
+  `%APPDATA%\VargoDynamics\SCSigReader\config.json` (same location as the log
+  file) so the app can always write it. On first launch after installation the
+  existing `config.json` from the install directory is migrated automatically.
+
 ## [1.4.3] – 2026-06-02
 
 ### Fixed

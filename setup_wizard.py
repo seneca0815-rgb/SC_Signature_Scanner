@@ -6,6 +6,9 @@ Called automatically by the installer, or manually via:
 """
 
 import json
+import os
+import platform
+import shutil
 import sys
 import tkinter as tk
 from pathlib import Path
@@ -26,12 +29,26 @@ def get_base_dir() -> Path:
     return Path(__file__).parent
 
 
+def get_config_path() -> Path:
+    """Return the user-writable config.json path (mirrors main.py logic)."""
+    if getattr(sys, "frozen", False) and platform.system() == "Windows":
+        appdata = os.environ.get("APPDATA", str(Path.home()))
+        cfg_dir = Path(appdata) / "VargoDynamics" / "SCSigReader"
+        cfg_dir.mkdir(parents=True, exist_ok=True)
+        cfg_path = cfg_dir / "config.json"
+        install_cfg = get_base_dir() / "config.json"
+        if not cfg_path.exists() and install_cfg.exists():
+            shutil.copy2(install_cfg, cfg_path)
+        return cfg_path
+    return get_base_dir() / "config.json"
+
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
 
 BASE_DIR     = get_base_dir()
-CONFIG_PATH  = BASE_DIR / "config.json"
+CONFIG_PATH  = get_config_path()
 PREVIEW_PATH = BASE_DIR / "theme_preview.png"
 THEMES_PATH  = BASE_DIR / "themes.py"
 
