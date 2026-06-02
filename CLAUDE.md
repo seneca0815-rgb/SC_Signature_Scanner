@@ -2,6 +2,16 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Active branch: `v2`
+
+**All new development happens on the `v2` branch.**
+`main` is frozen at v1.4.4 (tkinter baseline) — critical hotfixes only.
+Before starting any work, confirm you are on `v2`:
+```bash
+git branch          # should show * v2
+git checkout v2     # if not already on v2
+```
+
 ## What This Project Does
 
 SC Signature Reader is a ToS-compliant screen-OCR overlay for Star Citizen. It detects the signature display pill in the HUD (manufacturer-independent — works for Aegis, Anvil, Krueger, RSI, Argo), reads the signature number via OCR, looks it up in a mineral database, and displays the matched mineral + multiplier in an always-on-top overlay. No memory reading or DLL injection — pure screen analysis.

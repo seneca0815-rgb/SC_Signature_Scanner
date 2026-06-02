@@ -58,11 +58,20 @@ ToS-compliant – no memory reading, no DLL injection.
 
 Remaining uncovered lines are `if __name__ == "__main__"` guards and live-display tkinter drawing.
 
-## Current status (as of 2026-04-19)
-- V1.0 feature-complete: control panel, tray icon, hotkey, audio, setup wizard, themes
-- CI (GitHub Actions): runs on every push/PR; release workflow builds installer on v* tags
-- Vargo Dynamics branding throughout
-- Only open V1.0 item: Spectrum post + CIG community verification
+## Branch strategy (as of 2026-06-02)
+
+| Branch | Purpose | Status |
+|--------|---------|--------|
+| `main` | V1.x legacy — frozen at v1.4.4 | No new features; critical hotfixes only |
+| `v2`   | V2.0 development — PySide6, new features | Active development |
+
+**All new work goes on `v2`.** `main` is the stable reference for the tkinter baseline.
+
+## Current status (as of 2026-06-02)
+- V1.4.4 released — frozen on `main`
+- VargoMono font created (`fonts/VargoMono/VargoMono-Regular.ttf`)
+- V2 branch created — ready for PySide6 migration and new features
+- CI runs on both branches via GitHub Actions
 
 ## V1.0 Roadmap
 1. ✅ Fix unit tests
