@@ -107,6 +107,36 @@ pyinstaller --onefile --noconsole --name SCSigReader main.py \
 
 ---
 
+## V2.0 Roadmap (draft 2026-06-02)
+
+### Guiding principles
+- Use Claude Code skills throughout development (skills-first, see 2026-05-19 decisions)
+- Qt-Migration with Qt MCP for widget introspection and live testing
+
+### Features
+
+| # | Feature | Priority | Notes |
+|---|---------|----------|-------|
+| 1 | **Qt migration** (tkinter → PySide6) | Core | Use Qt MCP for dev loop; see migration open questions below |
+| 2 | **Scan region setup improvements** | High | Adapt to display resolution, FOV setting, headtracking active/inactive |
+| 3 | **Vargo sci-fi font** | High | Custom `.ttf` for brand-consistent typography across app, overlay, installer |
+| 4 | **Improved logging UX** | High | Easy access to logs from UI; currently hidden in `%APPDATA%` folder |
+| 5 | **Smarter resource log** | High | Parsed logfile or optional API integration; persistent history of found minerals |
+| 6 | **Cockpit Scanner Mode** | High | Permanent slim overlay; replaces/extends the existing `display_window.py` VD-SFR1 |
+| 7 | **Animations** | Medium | Scan-active indicator, signal-found notification animation |
+| 8 | **Better sounds** | Medium | More sci-fi; ship-speaker/radio effect filter on voice output |
+| 9 | **Additional app themes** | Medium | New PySide6 QSS themes; cockpit mode gets its own visual profile |
+| 10 | **Further improve detection rate** | Optional | New ship manufacturers, unusual FOV/lighting conditions |
+| 11 | **Ship radio function** | Optional | Spotify/Apple Music/online radio with ship-speaker effect — possibly separate app |
+
+### Open questions carried forward from 2026-05-19
+- Migrationsstrategie tkinter → PySide6: Big Bang vs. inkrementell?
+  Aktuell: AppState, OverlayWindow, ControlPanel, SetupWizard in tkinter.
+  Empfehlung: erst Overlay, dann ControlPanel, dann Wizard (inkrementell).
+- `.claude/` bereits im Repo — ✅ erledigt.
+
+---
+
 ## 2026-05-19 – Agentic Approach & Qt Migration: Architecture Decisions
 
 ### Decisions made (claude.ai planning session)
