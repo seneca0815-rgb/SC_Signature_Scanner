@@ -837,8 +837,9 @@ class TestSetupWizardUI(unittest.TestCase):
     def test_default_theme_is_vargo(self):
         self.assertEqual(self.wizard._theme_var.get(), "vargo")
 
-    def test_default_resolution_contains_2560(self):
-        self.assertIn("2560", self.wizard._res_var.get())
+    def test_default_resolution_is_in_presets(self):
+        from setup_wizard import RESOLUTIONS
+        self.assertIn(self.wizard._res_var.get(), RESOLUTIONS)
 
     def test_window_title_contains_setup(self):
         self.assertIn("Setup", self.wizard.root.title())

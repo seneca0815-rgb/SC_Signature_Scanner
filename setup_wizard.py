@@ -65,6 +65,41 @@ RESOLUTIONS = {
     "Custom (edit config.json manually)": None,
 }
 
+# Baseline used for proportional scan_region scaling
+_BASELINE_W, _BASELINE_H = 2560, 1440
+_BASELINE = RESOLUTIONS["2560 × 1440"]
+
+
+def _auto_detect_resolution(root: tk.Tk) -> tuple[str, bool]:
+    """Detect the primary screen resolution and ensure it exists in RESOLUTIONS.
+
+    Returns (label, is_new) where is_new is True when the entry was not in the
+    hardcoded presets and was computed proportionally from the 2560×1440 baseline.
+    Falls back to '2560 × 1440' if the screen dimensions cannot be read (e.g.
+    in tests where root is a mock).
+    """
+    try:
+        sw = int(root.winfo_screenwidth())
+        sh = int(root.winfo_screenheight())
+    except (TypeError, ValueError):
+        return "2560 × 1440", False
+
+    label = f"{sw} × {sh}"
+
+    if label in RESOLUTIONS:
+        return label, False
+
+    # Proportionally scale scan_region from the 2560×1440 baseline
+    sx = sw / _BASELINE_W
+    sy = sh / _BASELINE_H
+    RESOLUTIONS[label] = {
+        "top":    max(100, round(_BASELINE["top"]    * sy)),
+        "left":   max(0,   round(_BASELINE["left"]   * sx)),
+        "width":  round(_BASELINE["width"]  * sx),
+        "height": round(_BASELINE["height"] * sy),
+    }
+    return label, True
+
 # Hotkey options: display label → keyboard-library key name
 HOTKEYS = {
     "Scroll Lock":  "scroll lock",
@@ -111,8 +146,10 @@ class SetupWizard:
 
         self._audio_manager = audio_manager
 
-        self._step        = 0
-        self._res_var     = tk.StringVar(value="2560 × 1440")
+        self._step = 0
+        _detected_label, self._detected_is_new = _auto_detect_resolution(self.root)
+        self._detected_res = _detected_label
+        self._res_var     = tk.StringVar(value=_detected_label)
         self._theme_var   = tk.StringVar(value="vargo")
         self._hotkey_var  = tk.StringVar(value="Scroll Lock")
         self._preview_tk  = None   # keep reference so GC doesn't collect it
@@ -235,31 +272,38 @@ class SetupWizard:
         tk.Label(f,
                  text="Select the resolution you play Star Citizen at.",
                  bg=C_BG, fg=C_MUTED,
-                 font=("Consolas", 11)).pack(anchor="w", pady=(0, 20))
+                 font=("Consolas", 11)).pack(anchor="w", pady=(0, 12))
 
         for label in RESOLUTIONS:
             row = tk.Frame(f, bg=C_BG)
-            row.pack(fill="x", pady=3)
+            row.pack(fill="x", pady=2)
+            is_detected = (label == self._detected_res)
+            display_text = f"{label}  ← detected" if is_detected else label
             tk.Radiobutton(
                 row,
-                text=label,
+                text=display_text,
                 variable=self._res_var,
                 value=label,
-                bg=C_BG, fg=C_TEXT,
+                bg=C_BG,
+                fg=C_ACCENT if is_detected else C_TEXT,
                 selectcolor=C_SURFACE,
                 activebackground=C_BG,
                 activeforeground=C_ACCENT,
-                font=("Consolas", 12),
+                font=("Consolas", 12, "bold") if is_detected else ("Consolas", 12),
             ).pack(anchor="w")
 
+        hint_lines = ["The scan region can be fine-tuned in config.json later."]
+        if self._detected_is_new:
+            hint_lines.insert(
+                0,
+                f"Note: {self._detected_res} was auto-computed from the 2560×1440\n"
+                "baseline. Run scripts/find_roi.py to verify the scan region.",
+            )
         tk.Label(f,
-                 text=(
-                     "Not sure? Check Display Settings → Resolution.\n"
-                     "The scan region can be fine-tuned in config.json later."
-                 ),
+                 text="\n".join(hint_lines),
                  bg=C_BG, fg=C_MUTED,
                  font=("Consolas", 10), justify="left").pack(
-                     anchor="w", pady=(20, 0))
+                     anchor="w", pady=(16, 0))
 
     def _page_theme(self):
         f = self._frame
