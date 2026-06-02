@@ -82,6 +82,8 @@ jobs:
           --add-data "tray_icon.py;."
           --add-data "logger_setup.py;."
           --add-data "sounds;sounds"
+          --add-data "fonts/VargoMono/VargoMono-Regular.ttf;fonts"
+          --add-data "font_loader.py;."
           --icon "vargo_icon.ico"
           --name "SCSigReader"
 

@@ -190,7 +190,8 @@ def generate_installer_sidebar():
 
     # Text – try to load a font, fall back gracefully
     def _font(size):
-        for name in ("cour.ttf", "Courier New.ttf", "DejaVuSansMono.ttf"):
+        vargo = BASE_DIR / "fonts" / "VargoMono" / "VargoMono-Regular.ttf"
+        for name in (str(vargo), "cour.ttf", "Courier New.ttf", "DejaVuSansMono.ttf"):
             try:
                 return ImageFont.truetype(name, size)
             except OSError:
@@ -241,7 +242,8 @@ def generate_installer_header():
 
     # Company name
     def _font(size):
-        for name in ("cour.ttf", "Courier New.ttf", "DejaVuSansMono.ttf"):
+        vargo = BASE_DIR / "fonts" / "VargoMono" / "VargoMono-Regular.ttf"
+        for name in (str(vargo), "cour.ttf", "Courier New.ttf", "DejaVuSansMono.ttf"):
             try:
                 return ImageFont.truetype(name, size)
             except OSError:

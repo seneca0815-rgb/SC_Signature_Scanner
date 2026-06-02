@@ -103,17 +103,17 @@ class ControlPanel:
 
         tk.Label(inner_hdr, text="VARGO",
                  bg=C_SURFACE, fg=C_TEXT,
-                 font=("Courier New", 18, "bold"),
+                 font=("VargoMono", 18, "bold"),
                  padx=16, pady=10).pack(side="left")
 
         tk.Label(inner_hdr, text="DYNAMICS",
                  bg=C_SURFACE, fg=C_CYAN,
-                 font=("Courier New", 9),
+                 font=("VargoMono", 9),
                  padx=0).pack(side="left", anchor="s", pady=14)
 
         tk.Label(inner_hdr, text="SC Signature Reader",
                  bg=C_SURFACE, fg=C_MUTED,
-                 font=("Courier New", 9),
+                 font=("VargoMono", 9),
                  padx=16).pack(side="right", anchor="s", pady=14)
 
         tk.Frame(hdr, bg=C_BORDER, height=1).pack(fill="x")
@@ -126,12 +126,12 @@ class ControlPanel:
 
         self._status_dot = tk.Label(toggle_row, text="●",
                                     bg=C_BG, fg=C_GREEN,
-                                    font=("Courier New", 14))
+                                    font=("VargoMono", 14))
         self._status_dot.pack(side="left")
 
         self._status_lbl = tk.Label(toggle_row, text="ACTIVE",
                                     bg=C_BG, fg=C_GREEN,
-                                    font=("Courier New", 11, "bold"),
+                                    font=("VargoMono", 11, "bold"),
                                     padx=6)
         self._status_lbl.pack(side="left")
 
@@ -139,7 +139,7 @@ class ControlPanel:
             toggle_row, text="PAUSE",
             bg=C_BORDER, fg=C_TEXT,
             activebackground=C_SURFACE, activeforeground=C_CYAN,
-            font=("Courier New", 10), relief="flat",
+            font=("VargoMono", 10), relief="flat",
             padx=12, pady=4,
             command=self._on_toggle)
         self._toggle_btn.pack(side="right")
@@ -147,7 +147,7 @@ class ControlPanel:
         hotkey = self._config.get("hotkey", "F9")
         tk.Label(w, text=f"Hotkey: {hotkey}",
                  bg=C_BG, fg=C_MUTED,
-                 font=("Courier New", 9),
+                 font=("VargoMono", 9),
                  padx=16).pack(anchor="w")
 
         roi_row = tk.Frame(w, bg=C_BG)
@@ -157,7 +157,7 @@ class ControlPanel:
             roi_row, text="SELECT SCAN REGION",
             bg=C_BORDER, fg=C_TEXT,
             activebackground=C_SURFACE, activeforeground=C_CYAN,
-            font=("Courier New", 10), relief="flat",
+            font=("VargoMono", 10), relief="flat",
             padx=10, pady=4,
             command=self._on_select_roi,
         ).pack(side="left")
@@ -176,7 +176,7 @@ class ControlPanel:
             self._signal_frame,
             text="–  no signal",
             bg=C_SURFACE, fg=C_MUTED,
-            font=("Courier New", 12),
+            font=("VargoMono", 12),
             padx=12, pady=8, anchor="w")
         self._signal_lbl.pack(fill="x")
 
@@ -214,7 +214,7 @@ class ControlPanel:
             values=list(self._themes.keys()),
             state="readonly",
             style="Vargo.TCombobox",
-            font=("Courier New", 11),
+            font=("VargoMono", 11),
             width=18)
         combo.pack(side="left")
         combo.bind("<<ComboboxSelected>>", self._on_theme_change)
@@ -223,7 +223,7 @@ class ControlPanel:
         self._theme_preview = tk.Label(
             theme_row,
             text="  preview  ",
-            font=("Courier New", 10),
+            font=("VargoMono", 10),
             padx=8, pady=4)
         self._theme_preview.pack(side="right")
         self._refresh_theme_preview()
@@ -245,7 +245,7 @@ class ControlPanel:
             values=POSITION_PRESETS,
             state="readonly",
             style="Vargo.TCombobox",
-            font=("Courier New", 11),
+            font=("VargoMono", 11),
             width=18)
         pos_combo.pack(side="left")
         pos_combo.bind("<<ComboboxSelected>>", self._on_position_change)
@@ -261,7 +261,7 @@ class ControlPanel:
 
         tk.Label(audio_row1, text="Audio",
                  bg=C_BG, fg=C_TEXT,
-                 font=("Courier New", 11)).pack(side="left")
+                 font=("VargoMono", 11)).pack(side="left")
 
         self._audio_btn_lbl = "ON" if self._config.get("audio_enabled", True) else "OFF"
         self._audio_toggle_btn = tk.Button(
@@ -269,7 +269,7 @@ class ControlPanel:
             text=self._audio_btn_lbl,
             bg=C_BORDER, fg=C_TEXT,
             activebackground=C_SURFACE, activeforeground=C_CYAN,
-            font=("Courier New", 10), relief="flat",
+            font=("VargoMono", 10), relief="flat",
             padx=10, pady=3,
             command=self._on_audio_toggle)
         self._audio_toggle_btn.pack(side="right")
@@ -281,7 +281,7 @@ class ControlPanel:
 
         tk.Label(audio_row2, text="Volume",
                  bg=C_BG, fg=C_TEXT,
-                 font=("Courier New", 11)).pack(side="left")
+                 font=("VargoMono", 11)).pack(side="left")
 
         init_vol = int(self._config.get("audio_volume", 0.8) * 100)
         self._volume_var = tk.IntVar(value=init_vol)
@@ -293,7 +293,7 @@ class ControlPanel:
             bg=C_BG, fg=C_TEXT,
             troughcolor=C_SURFACE, highlightthickness=0,
             activebackground=C_CYAN,
-            font=("Courier New", 9),
+            font=("VargoMono", 9),
             length=160,
             showvalue=False,
             command=self._on_volume_change,
@@ -312,7 +312,7 @@ class ControlPanel:
             bg=C_BG, fg=C_MUTED,
             selectcolor=C_SURFACE,
             activebackground=C_BG, activeforeground=C_TEXT,
-            font=("Courier New", 9),
+            font=("VargoMono", 9),
             command=self._on_signal_sound_toggle,
         ).pack(side="left")
 
@@ -331,7 +331,7 @@ class ControlPanel:
             lbl = tk.Label(self._recent_frame,
                            text="",
                            bg=C_SURFACE, fg=C_MUTED,
-                           font=("Courier New", 10),
+                           font=("VargoMono", 10),
                            padx=10, pady=2, anchor="w")
             lbl.pack(fill="x")
             self._recent_labels.append(lbl)
@@ -351,7 +351,7 @@ class ControlPanel:
                 perf_frame,
                 text="avg cycle:   – ms",
                 bg=C_SURFACE, fg=C_MUTED,
-                font=("Courier New", 10),
+                font=("VargoMono", 10),
                 padx=12, pady=4, anchor="w")
             self._perf_avg_lbl.pack(fill="x")
 
@@ -359,7 +359,7 @@ class ControlPanel:
                 perf_frame,
                 text="last cycle:  – ms",
                 bg=C_SURFACE, fg=C_MUTED,
-                font=("Courier New", 10),
+                font=("VargoMono", 10),
                 padx=12, pady=4, anchor="w")
             self._perf_last_lbl.pack(fill="x")
 
@@ -372,21 +372,21 @@ class ControlPanel:
         tk.Button(btn_row, text="MINIMISE TO TRAY",
                   bg=C_BORDER, fg=C_TEXT,
                   activebackground=C_SURFACE, activeforeground=C_CYAN,
-                  font=("Courier New", 10), relief="flat",
+                  font=("VargoMono", 10), relief="flat",
                   padx=10, pady=6,
                   command=self._on_close).pack(side="left")
 
         tk.Button(btn_row, text="LOG",
                   bg=C_SURFACE, fg=C_MUTED,
                   activebackground=C_BORDER, activeforeground=C_TEXT,
-                  font=("Courier New", 10), relief="flat",
+                  font=("VargoMono", 10), relief="flat",
                   padx=10, pady=6,
                   command=self._on_open_log).pack(side="left", padx=(8, 0))
 
         tk.Button(btn_row, text="EXIT",
                   bg=C_SURFACE, fg=C_RED,
                   activebackground=C_BORDER, activeforeground=C_RED,
-                  font=("Courier New", 10, "bold"), relief="flat",
+                  font=("VargoMono", 10, "bold"), relief="flat",
                   padx=10, pady=6,
                   command=self._on_exit).pack(side="right")
 
@@ -445,7 +445,7 @@ class ControlPanel:
         row.pack(fill="x", padx=16, pady=(10, 2))
         tk.Label(row, text=title,
                  bg=C_BG, fg=C_GOLD,
-                 font=("Courier New", 8),
+                 font=("VargoMono", 8),
                  padx=0).pack(side="left")
         tk.Frame(row, bg=C_BORDER, height=1).pack(
             side="left", fill="x", expand=True, padx=(8, 0), pady=4)

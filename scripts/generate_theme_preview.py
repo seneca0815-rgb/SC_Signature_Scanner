@@ -75,7 +75,9 @@ def blend(fg: tuple, bg: tuple, alpha: float) -> tuple[int, int, int]:
 
 
 def load_font(size: int) -> ImageFont.FreeTypeFont:
+    _vargo = Path(__file__).parent.parent / "fonts" / "VargoMono" / "VargoMono-Regular.ttf"
     candidates = [
+        str(_vargo),
         "consola.ttf",
         "Consolas.ttf",
         "DejaVuSansMono.ttf",

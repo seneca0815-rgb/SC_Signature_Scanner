@@ -22,8 +22,13 @@ import tkinter as tk
 from app_state import AppState
 from audio_manager import AudioManager
 from control_panel import ControlPanel
+from font_loader import load_vargo_font
 from logger_setup import get_logger, setup_logger
 from tray_icon import TrayIcon
+
+# Load VargoMono before any Tk window is created.
+# Returns "VargoMono" on success or "Consolas" as fallback.
+UI_FONT = load_vargo_font()
 
 VERSION = "1.4.4"
 

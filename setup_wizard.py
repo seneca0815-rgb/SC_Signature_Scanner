@@ -256,10 +256,10 @@ class SetupWizard:
         hdr.pack(fill="x", padx=32, pady=(28, 0))
         tk.Label(hdr, text="SC Signature Reader",
                  bg=C_BG, fg=C_ACCENT,
-                 font=("Consolas", 18, "bold")).pack(anchor="w")
+                 font=("VargoMono", 18, "bold")).pack(anchor="w")
         tk.Label(hdr, text="Setup Wizard",
                  bg=C_BG, fg=C_MUTED,
-                 font=("Consolas", 11)).pack(anchor="w")
+                 font=("VargoMono", 11)).pack(anchor="w")
         tk.Frame(hdr, bg=C_BORDER, height=1).pack(fill="x", pady=(12, 0))
 
     def _build_nav(self):
@@ -274,7 +274,7 @@ class SetupWizard:
             row, text="← Back",
             bg=C_BTN_BG, fg=C_TEXT, relief="flat",
             activebackground=C_BTN_HOV, activeforeground=C_TEXT,
-            font=("Consolas", 11), padx=16, pady=6,
+            font=("VargoMono", 11), padx=16, pady=6,
             command=self._back)
         self._btn_back.pack(side="left")
 
@@ -282,13 +282,13 @@ class SetupWizard:
             row, text="Next →",
             bg=C_ACCENT, fg="#111827", relief="flat",
             activebackground="#c9b368", activeforeground="#111827",
-            font=("Consolas", 11, "bold"), padx=20, pady=6,
+            font=("VargoMono", 11, "bold"), padx=20, pady=6,
             command=self._next)
         self._btn_next.pack(side="right")
 
         self._step_label = tk.Label(
             row, text="", bg=C_BG, fg=C_MUTED,
-            font=("Consolas", 10))
+            font=("VargoMono", 10))
         self._step_label.pack(side="right", padx=16)
 
     # ------------------------------------------------------------------
@@ -329,7 +329,7 @@ class SetupWizard:
     def _page_welcome(self):
         f = self._frame
         tk.Label(f, text="Welcome", bg=C_BG, fg=C_TEXT,
-                 font=("Consolas", 15, "bold")).pack(anchor="w", pady=(24, 8))
+                 font=("VargoMono", 15, "bold")).pack(anchor="w", pady=(24, 8))
         body = (
             "This wizard will configure SC Signature Reader\n"
             "for your system.\n\n"
@@ -339,16 +339,16 @@ class SetupWizard:
             "changed at any time."
         )
         tk.Label(f, text=body, bg=C_BG, fg=C_MUTED,
-                 font=("Consolas", 11), justify="left").pack(anchor="w")
+                 font=("VargoMono", 11), justify="left").pack(anchor="w")
 
     def _page_resolution(self):
         f = self._frame
         tk.Label(f, text="Screen resolution", bg=C_BG, fg=C_TEXT,
-                 font=("Consolas", 15, "bold")).pack(anchor="w", pady=(16, 4))
+                 font=("VargoMono", 15, "bold")).pack(anchor="w", pady=(16, 4))
         tk.Label(f,
                  text="Select the resolution you play Star Citizen at.",
                  bg=C_BG, fg=C_MUTED,
-                 font=("Consolas", 11)).pack(anchor="w", pady=(0, 8))
+                 font=("VargoMono", 11)).pack(anchor="w", pady=(0, 8))
 
         # Scrollable list so the nav buttons stay visible regardless of
         # how many presets are in RESOLUTIONS.
@@ -386,7 +386,7 @@ class SetupWizard:
                 selectcolor=C_SURFACE,
                 activebackground=C_BG,
                 activeforeground=C_ACCENT,
-                font=("Consolas", 12, "bold") if is_detected else ("Consolas", 12),
+                font=("VargoMono", 12, "bold") if is_detected else ("VargoMono", 12),
             ).pack(anchor="w", pady=2)
 
         # Scroll to detected entry so it's immediately visible
@@ -415,17 +415,17 @@ class SetupWizard:
         tk.Label(f,
                  text="\n".join(hint_lines),
                  bg=C_BG, fg=C_MUTED,
-                 font=("Consolas", 10), justify="left").pack(
+                 font=("VargoMono", 10), justify="left").pack(
                      anchor="w", pady=(8, 0))
 
     def _page_theme(self):
         f = self._frame
         tk.Label(f, text="Overlay theme", bg=C_BG, fg=C_TEXT,
-                 font=("Consolas", 15, "bold")).pack(anchor="w", pady=(16, 4))
+                 font=("VargoMono", 15, "bold")).pack(anchor="w", pady=(16, 4))
         tk.Label(f,
                  text="Choose how the overlay looks in-game.",
                  bg=C_BG, fg=C_MUTED,
-                 font=("Consolas", 11)).pack(anchor="w", pady=(0, 12))
+                 font=("VargoMono", 11)).pack(anchor="w", pady=(0, 12))
 
         # ---- theme radio buttons + live preview side by side ----
         content = tk.Frame(f, bg=C_BG)
@@ -454,7 +454,7 @@ class SetupWizard:
                 selectcolor=C_SURFACE,
                 activebackground=C_BG,
                 activeforeground=C_ACCENT,
-                font=("Consolas", 12),
+                font=("VargoMono", 12),
                 command=self._update_theme_preview,
             ).pack(anchor="w", pady=4)
 
@@ -488,7 +488,7 @@ class SetupWizard:
 
         # Text
         try:
-            fnt = tkfont.Font(family="Consolas", size=fs, weight="bold")
+            fnt = tkfont.Font(family="VargoMono", size=fs, weight="bold")
         except Exception:
             fnt = tkfont.Font(size=fs, weight="bold")
         canvas.create_text(140, 40, text=ex, fill=fg,
@@ -498,17 +498,17 @@ class SetupWizard:
         alpha_txt = f"alpha {theme.get('alpha', 1.0):.2f}"
         canvas.create_text(260, 72, text=alpha_txt,
                            fill=C_MUTED,
-                           font=tkfont.Font(family="Consolas", size=9),
+                           font=tkfont.Font(family="VargoMono", size=9),
                            anchor="e")
 
     def _page_audio(self):
         f = self._frame
         tk.Label(f, text="AUDIO SETTINGS", bg=C_BG, fg=C_TEXT,
-                 font=("Consolas", 15, "bold")).pack(anchor="w", pady=(18, 4))
+                 font=("VargoMono", 15, "bold")).pack(anchor="w", pady=(18, 4))
         tk.Label(f,
                  text="Configure scanner audio feedback.",
                  bg=C_BG, fg=C_MUTED,
-                 font=("Consolas", 11)).pack(anchor="w", pady=(0, 14))
+                 font=("VargoMono", 11)).pack(anchor="w", pady=(0, 14))
 
         # Row 1 – Master switch
         row1 = tk.Frame(f, bg=C_BG)
@@ -519,14 +519,14 @@ class SetupWizard:
             bg=C_BG, fg=C_TEXT,
             selectcolor=C_SURFACE,
             activebackground=C_BG, activeforeground=C_ACCENT,
-            font=("Consolas", 12),
+            font=("VargoMono", 12),
         ).pack(anchor="w")
 
         # Row 2 – Volume
         row2 = tk.Frame(f, bg=C_BG)
         row2.pack(fill="x", pady=(6, 2))
         tk.Label(row2, text="Volume", bg=C_BG, fg=C_TEXT,
-                 font=("Consolas", 11), width=22, anchor="w").pack(side="left")
+                 font=("VargoMono", 11), width=22, anchor="w").pack(side="left")
         tk.Scale(
             row2,
             variable=self._volume_var,
@@ -536,16 +536,16 @@ class SetupWizard:
             bg=C_BG, fg=C_TEXT,
             troughcolor=C_SURFACE, highlightthickness=0,
             activebackground=C_ACCENT,
-            font=("Consolas", 9),
+            font=("VargoMono", 9),
             length=200,
         ).pack(side="left")
         tk.Label(row2, text="%", bg=C_BG, fg=C_MUTED,
-                 font=("Consolas", 10)).pack(side="left", padx=(4, 0))
+                 font=("VargoMono", 10)).pack(side="left", padx=(4, 0))
 
         tk.Label(f,
                  text="Use the Windows volume mixer to adjust playback level.",
                  bg=C_BG, fg=C_MUTED,
-                 font=("Consolas", 9), justify="left").pack(
+                 font=("VargoMono", 9), justify="left").pack(
                      anchor="w", pady=(0, 6))
 
         # Row 3 – Individual sound toggles
@@ -564,20 +564,20 @@ class SetupWizard:
                 bg=C_BG, fg=C_TEXT,
                 selectcolor=C_SURFACE,
                 activebackground=C_BG, activeforeground=C_ACCENT,
-                font=("Consolas", 11),
+                font=("VargoMono", 11),
             ).pack(anchor="w", padx=(16, 0))
 
         # Row 4 – Test button
         row4 = tk.Frame(f, bg=C_BG)
         row4.pack(fill="x", pady=(12, 0))
         self._test_msg_lbl = tk.Label(row4, text="", bg=C_BG, fg=C_MUTED,
-                                      font=("Consolas", 10))
+                                      font=("VargoMono", 10))
         self._test_msg_lbl.pack(side="right", padx=(8, 0))
         tk.Button(
             row4, text="TEST AUDIO",
             bg=C_BTN_BG, fg=C_ACCENT,
             activebackground=C_BTN_HOV, activeforeground=C_ACCENT,
-            font=("Consolas", 11, "bold"), relief="flat",
+            font=("VargoMono", 11, "bold"), relief="flat",
             padx=14, pady=5,
             command=self._on_test_audio,
         ).pack(side="left")
@@ -614,11 +614,11 @@ class SetupWizard:
     def _page_hotkey(self):
         f = self._frame
         tk.Label(f, text="Scanner hotkey", bg=C_BG, fg=C_TEXT,
-                 font=("Consolas", 15, "bold")).pack(anchor="w", pady=(14, 4))
+                 font=("VargoMono", 15, "bold")).pack(anchor="w", pady=(14, 4))
         tk.Label(f,
                  text="Choose a key to pause / resume the scanner while in-game.",
                  bg=C_BG, fg=C_MUTED,
-                 font=("Consolas", 11)).pack(anchor="w", pady=(0, 10))
+                 font=("VargoMono", 11)).pack(anchor="w", pady=(0, 10))
 
         for label in HOTKEYS:
             row = tk.Frame(f, bg=C_BG)
@@ -632,7 +632,7 @@ class SetupWizard:
                 selectcolor=C_SURFACE,
                 activebackground=C_BG,
                 activeforeground=C_ACCENT,
-                font=("Consolas", 12),
+                font=("VargoMono", 12),
             ).pack(anchor="w")
 
         tk.Label(f,
@@ -642,13 +642,13 @@ class SetupWizard:
                      "The hotkey can be changed later in config.json."
                  ),
                  bg=C_BG, fg=C_MUTED,
-                 font=("Consolas", 10), justify="left").pack(
+                 font=("VargoMono", 10), justify="left").pack(
                      anchor="w", pady=(10, 0))
 
     def _page_finish(self):
         f = self._frame
         tk.Label(f, text="All done!", bg=C_BG, fg=C_ACCENT,
-                 font=("Consolas", 15, "bold")).pack(anchor="w", pady=(24, 8))
+                 font=("VargoMono", 15, "bold")).pack(anchor="w", pady=(24, 8))
 
         res    = self._res_var.get()
         theme  = self._theme_var.get()
@@ -664,12 +664,12 @@ class SetupWizard:
             "and launch SC Signature Reader."
         )
         tk.Label(f, text=summary, bg=C_BG, fg=C_TEXT,
-                 font=("Consolas", 12), justify="left").pack(anchor="w")
+                 font=("VargoMono", 12), justify="left").pack(anchor="w")
 
         tk.Label(f,
                  text="You can reopen this wizard anytime with:  --setup",
                  bg=C_BG, fg=C_MUTED,
-                 font=("Consolas", 10)).pack(anchor="w", pady=(24, 0))
+                 font=("VargoMono", 10)).pack(anchor="w", pady=(24, 0))
 
     # ------------------------------------------------------------------
     # Save & launch
